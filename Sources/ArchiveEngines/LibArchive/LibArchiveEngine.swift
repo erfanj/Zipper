@@ -116,7 +116,8 @@ public final class LibArchiveEngine: ArchiveEngine, @unchecked Sendable {
         t[.iso] = .init(format: .iso, operations: read.union([.create]), compressionMethods: [.store],
                         limitations: ["ISO creation produces ISO 9660 with Rock Ridge and Joliet extensions."])
         t[.rpm] = .init(format: .rpm, operations: read, limitations: ["Payload is listed and extracted; scriptlets are never executed."])
-        t[.warc] = .init(format: .warc, operations: rw.subtracting([.preserveMetadata]))
+        // libarchive's WARC writer drops some entries in testing, so only reading is offered.
+        t[.warc] = .init(format: .warc, operations: read)
         t[.shar] = .init(format: .shar, operations: [.create], limitations: ["Shell archives are written only; reading would require executing a script."])
         t[.uuencode] = .init(format: .uuencode, operations: read)
         // Packages built on ZIP / RAR / 7z / TAR inherit the container's support (see EngineRegistry),

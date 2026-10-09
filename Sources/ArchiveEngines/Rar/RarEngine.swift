@@ -11,7 +11,7 @@ public final class RarEngine: ArchiveEngine, @unchecked Sendable {
     public init(executable: URL? = HelperLocator.find(["rar"])) {
         self.executable = executable
         var version: String?
-        if let exe = executable, let r = try? HelperProcess(exe, ["-iver"]).run() {
+        if let exe = executable, let r = ProbeCache.run(exe, ["-iver"]) {
             version = r.stdout.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: " ").first { $0.first?.isNumber == true }
         }
         descriptor = EngineDescriptor(
@@ -45,7 +45,7 @@ public final class RarEngine: ArchiveEngine, @unchecked Sendable {
         guard let exe = executable else { throw ArchiveError.engineUnavailable(.rar, reason: descriptor.unavailableReason ?? "") }
         let s = request.settings
         // -ma5 RAR5, -m0..5 level, -idq quiet, -y yes, -ol store links, -scf? names in UTF-8 lists.
-        var args = ["a", "-ma5", "-m\(min(5, max(0, (s.clampedLevel * 5 + 8) / 9)))", "-idq", "-y", "-scul"]
+        var args = ["a", "-ma5", "-m\(min(5, max(0, (s.clampedLevel * 5 + 8) / 9)))", "-idq", "-y", "-scfl"] // -scfl: list files are UTF-8
         if s.symlinks == .preserve { args.append("-ol") }
         if let t = s.threads { args.append("-mt\(max(1, min(64, t)))") }
         if s.solid == .on { args.append("-s") }

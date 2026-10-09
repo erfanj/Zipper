@@ -25,14 +25,14 @@ fetch() { # url file sha256
   echo "$sum  $SRC/$file" | shasum -a 256 -c - >/dev/null || { echo "Checksum mismatch for $file"; exit 1; }
 }
 
-fetch https://github.com/libarchive/libarchive/releases/download/v3.7.7/libarchive-3.7.7.tar.xz libarchive-3.7.7.tar.xz 879acd83c3399c7caaee73fe5f7418e06087ab2aaf40af3e99b9e29beb29faee
-fetch https://github.com/tukaani-project/xz/releases/download/v5.6.3/xz-5.6.3.tar.xz xz-5.6.3.tar.xz db0590629b6f0fa36e74aea5f9731dc6f8df068ce7b7bafa45301832a5eebc3a
-fetch https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz zstd-1.5.6.tar.gz 8c29e06cf42aacc1eafc4077ae2ec6c6fcb96a626157e0593d5e82a34fd403c1
+fetch https://github.com/libarchive/libarchive/releases/download/v3.8.9/libarchive-3.8.9.tar.xz libarchive-3.8.9.tar.xz 888c934f9d95648ecb9163dc8e23ab80a476ecb81a8f1154704a227b5b676dde
+fetch https://github.com/tukaani-project/xz/releases/download/v5.8.4/xz-5.8.4.tar.xz xz-5.8.4.tar.xz 4ce24038fd4221e0d13bc1a2de7a4db56e90b92b3bf75321f6c14be73f65de4b
+fetch https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz zstd-1.5.7.tar.gz eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3
 fetch https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz lz4-1.10.0.tar.gz 537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b
 # Brotli's C sources, taken from the official PyPI source distribution (same code as the GitHub tag).
-fetch https://files.pythonhosted.org/packages/source/B/Brotli/Brotli-1.1.0.tar.gz Brotli-1.1.0.tar.gz 81de08ac11bcb85841e440c13611c00b67d3bf82698314928d0b676362546724
+fetch https://files.pythonhosted.org/packages/source/b/brotli/brotli-1.2.0.tar.gz brotli-1.2.0.tar.gz e310f77e41941c13340a95976fe66a8a95b01e783d430eeaf7a2f87e0a57dd0a
 # Official 7-Zip console build for macOS (universal arm64/x86_64), bundled as a helper process.
-fetch https://github.com/ip7z/7zip/releases/download/24.08/7z2408-mac.tar.xz 7z2408-mac.tar.xz 4d87dae186279ff717749abae3c75dc6f29ce5aea370aa42db4b8083299a9055
+fetch https://github.com/ip7z/7zip/releases/download/26.04/7z2604-mac.tar.xz 7z2604-mac.tar.xz bee04358cbcbc7106273cee0e8d72916db2696c48067a3538c34d8cd6fd16578
 
 ARCHFLAGS=""
 for a in $ARCHS; do ARCHFLAGS="$ARCHFLAGS -arch $a"; done
@@ -45,21 +45,21 @@ B="$ROOT/Vendor/build"
 rm -rf "$B"; mkdir -p "$B"
 
 # xz (liblzma)
-tar -xJf "$SRC/xz-5.6.3.tar.xz" -C "$B"
-(cd "$B/xz-5.6.3" && ./configure --prefix="$PREFIX" --disable-shared --enable-static --disable-xz --disable-xzdec --disable-lzmadec --disable-lzmainfo --disable-scripts --disable-doc --disable-nls >/dev/null && make -j"$JOBS" >/dev/null && make install >/dev/null)
+tar -xJf "$SRC/xz-5.8.4.tar.xz" -C "$B"
+(cd "$B/xz-5.8.4" && ./configure --prefix="$PREFIX" --disable-shared --enable-static --disable-xz --disable-xzdec --disable-lzmadec --disable-lzmainfo --disable-scripts --disable-doc --disable-nls >/dev/null && make -j"$JOBS" >/dev/null && make install >/dev/null)
 
 # zstd
-tar -xzf "$SRC/zstd-1.5.6.tar.gz" -C "$B"
-(cd "$B/zstd-1.5.6/lib" && make -j"$JOBS" libzstd.a ZSTD_LIB_MINIFY=0 >/dev/null && make install-static install-includes install-pc PREFIX="$PREFIX" >/dev/null)
+tar -xzf "$SRC/zstd-1.5.7.tar.gz" -C "$B"
+(cd "$B/zstd-1.5.7/lib" && make -j"$JOBS" libzstd.a ZSTD_LIB_MINIFY=0 >/dev/null && make install-static install-includes install-pc PREFIX="$PREFIX" >/dev/null)
 
 # lz4
 tar -xzf "$SRC/lz4-1.10.0.tar.gz" -C "$B"
 (cd "$B/lz4-1.10.0/lib" && make -j"$JOBS" liblz4.a >/dev/null && make install PREFIX="$PREFIX" BUILD_SHARED=no >/dev/null)
 
 # brotli (compiled directly; no CMake needed)
-tar -xzf "$SRC/Brotli-1.1.0.tar.gz" -C "$B"
+tar -xzf "$SRC/brotli-1.2.0.tar.gz" -C "$B"
 (
-  cd "$B/Brotli-1.1.0/c"
+  cd "$B/brotli-1.2.0/c"
   mkdir -p obj
   for f in common/*.c dec/*.c enc/*.c; do clang $CFLAGS -Iinclude -c "$f" -o "obj/$(echo "$f" | tr '/' '_').o"; done
   ar rcs "$PREFIX/lib/libbrotlicommon.a" obj/common_*.o
@@ -70,16 +70,16 @@ tar -xzf "$SRC/Brotli-1.1.0.tar.gz" -C "$B"
 prefix=$PREFIX
 Name: libbrotlienc
 Description: Brotli encoder (static)
-Version: 1.1.0
+Version: 1.2.0
 Libs: -L\${prefix}/lib -lbrotlienc -lbrotlidec -lbrotlicommon
 Cflags: -I\${prefix}/include
 PC
 )
 
 # libarchive
-tar -xJf "$SRC/libarchive-3.7.7.tar.xz" -C "$B"
+tar -xJf "$SRC/libarchive-3.8.9.tar.xz" -C "$B"
 (
-  cd "$B/libarchive-3.7.7"
+  cd "$B/libarchive-3.8.9"
   ./configure --prefix="$PREFIX" --disable-shared --enable-static --without-openssl --without-nettle --without-mbedtls \
     --without-lzo2 --without-cng --with-lzma --with-zstd --with-lz4 --with-bz2lib --with-zlib --with-iconv --with-xml2 \
     --disable-bsdtar --disable-bsdcpio --disable-bsdcat --disable-bsdunzip --disable-acl \
@@ -91,7 +91,7 @@ sed -i '' -e "s|^Libs:.*|Libs: -L$PREFIX/lib -larchive -llzma -lzstd -llz4 -lbz2
 
 # 7-Zip helper
 mkdir -p "$PREFIX/helpers"
-tar -xJf "$SRC/7z2408-mac.tar.xz" -C "$PREFIX/helpers" 7zz License.txt
+tar -xJf "$SRC/7z2604-mac.tar.xz" -C "$PREFIX/helpers" 7zz License.txt
 mv "$PREFIX/helpers/License.txt" "$PREFIX/helpers/7-Zip-License.txt"
 
 echo "Dependencies installed in $PREFIX"

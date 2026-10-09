@@ -1,0 +1,6439 @@
+{
+  "engines" : [
+    {
+      "id" : "libarchive",
+      "implementation" : "C library linked in-process (libarchive 3.7.2 zlib\/1.3 liblzma\/5.4.5 bz2lib\/1.0.8 liblz4\/1.9.4 libzstd\/1.5.5)",
+      "isAvailable" : true,
+      "isolation" : "Runs in-process; never writes to disk itself. All output passes through the path-validating extraction sink with resource limits.",
+      "license" : "BSD-2-Clause",
+      "minimumVersion" : "3.6.0",
+      "name" : "libarchive",
+      "version" : "3.7.2"
+    },
+    {
+      "id" : "7zip",
+      "implementation" : "Separate helper process (7z)",
+      "isAvailable" : true,
+      "isolation" : "Separate process with a minimal environment. Writes only into a private staging folder; results are validated and imported by the safe sink. Free-space watchdog stops runaway output.",
+      "license" : "LGPL-2.1-or-later (+ unRAR restriction; BSD-3 for some codecs)",
+      "licensingRestrictions" : "The bundled unRAR code may only be used to extract RAR archives, not to create a RAR-compatible compressor.",
+      "location" : "\/usr\/bin\/7z",
+      "minimumVersion" : "21.00",
+      "name" : "7-Zip",
+      "version" : "23.01"
+    },
+    {
+      "id" : "unar",
+      "implementation" : "Separate helper processes (lsar \/ unar)",
+      "isAvailable" : true,
+      "isolation" : "Separate process; extracts into a private staging folder that is validated and imported by the safe sink.",
+      "license" : "LGPL-2.1-or-later",
+      "location" : "\/usr\/bin",
+      "minimumVersion" : "1.10",
+      "name" : "The Unarchiver (XADMaster)"
+    },
+    {
+      "id" : "rar",
+      "implementation" : "User-installed command-line tool (rar)",
+      "isAvailable" : true,
+      "isolation" : "Separate process; reads only the files selected for compression.",
+      "license" : "Proprietary (RARLAB)",
+      "licensingRestrictions" : "Not bundled. Requires a copy of RAR installed and licensed by the user; Universal Archiver only invokes it.",
+      "location" : "\/usr\/bin\/rar",
+      "minimumVersion" : "5.0",
+      "name" : "RAR (RARLAB)",
+      "version" : "7.00"
+    },
+    {
+      "id" : "external-tools",
+      "implementation" : "User-installed command-line programs: zpaq, lrzip, lzop, nomarch",
+      "isAvailable" : true,
+      "isolation" : "Separate processes writing only into a private staging folder; results pass through the safe sink.",
+      "license" : "Each tool's own license (not bundled; invoked as separate programs)",
+      "name" : "Reference tools (zpaq, lrzip, lzop, nomarch)"
+    }
+  ],
+  "formats" : [
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "store",
+              "deflate"
+            ],
+            "decryptionMethods" : [
+              "zipcrypto",
+              "zip-aes128",
+              "zip-aes256"
+            ],
+            "encryptionMethods" : [
+              "zip-aes256",
+              "zip-aes128",
+              "zipcrypto"
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Split (.z01) ZIP sets are read through the 7-Zip engine.",
+              "Deflate64, PPMd, WavPack and JPEG entries in ZIPX are not decoded by libarchive."
+            ],
+            "memory" : "Bounded (< 64 MB).",
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "readSplit",
+              "encrypt",
+              "decrypt",
+              "preserveMetadata",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size.",
+            "threading" : "Single-threaded."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+              "deflate",
+              "deflate64",
+              "bzip2",
+              "lzma",
+              "ppmd",
+              "store"
+            ],
+            "decryptionMethods" : [
+              "zipcrypto",
+              "zip-aes128",
+              "zip-aes256"
+            ],
+            "encryptionMethods" : [
+              "zip-aes256",
+              "zip-aes128",
+              "zipcrypto"
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Split ZIPs are created as .zip.001, .zip.002 … (byte-split), which 7-Zip-compatible tools read. Classic spanned .z01 sets can be read but not created."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "createSplit",
+              "readSplit",
+              "encrypt",
+              "decrypt",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "zip",
+        "zip64"
+      ],
+      "format" : "zip",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "ZIP",
+      "notes" : "ZIP64 is handled transparently for archives and entries larger than 4 GB.",
+      "signatures" : 3
+    },
+    {
+      "baseFormat" : "zip",
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+              "zipcrypto",
+              "zip-aes128",
+              "zip-aes256"
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zipx",
+            "limitations" : [
+              "Only entries using Store, Deflate, BZip2, LZMA, XZ or Zstandard are readable."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "decrypt",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zipx",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "readSplit",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "zipx"
+      ],
+      "format" : "zipx",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "ZIPX",
+      "notes" : "WinZip extended ZIP. Readable when the per-entry methods (LZMA, PPMd, XZ, BZip2, Zstandard) are supported by the selected engine. WinZip's proprietary JPEG\/WavPack methods are not supported.",
+      "signatures" : 1
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "store",
+              "lzma2",
+              "lzma",
+              "deflate",
+              "bzip2",
+              "ppmd"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "7z",
+            "limitations" : [
+              "Encrypted 7z archives require the 7-Zip engine.",
+              "Cannot create multi-volume or encrypted 7z."
+            ],
+            "memory" : "Proportional to the LZMA dictionary (up to ~1.5 GB for 1 GB dictionaries).",
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "readSplit",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "threading" : "Single-threaded."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+              "lzma2",
+              "lzma",
+              "ppmd",
+              "bzip2",
+              "deflate",
+              "store"
+            ],
+            "decryptionMethods" : [
+              "7z-aes256"
+            ],
+            "encryptionMethods" : [
+              "7z-aes256"
+            ],
+            "format" : "7z",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "createSplit",
+              "readSplit",
+              "encrypt",
+              "decrypt",
+              "encryptFilenames",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "7z",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "7z"
+      ],
+      "format" : "7z",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "7-Zip",
+      "signatures" : 1
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "rar",
+            "limitations" : [
+              "Encrypted RAR archives require the 7-Zip engine.",
+              "RAR creation requires the licensed RAR tool."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+              "rar4-aes128",
+              "rar5-aes256"
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "rar",
+            "limitations" : [
+              "Extraction only. RAR creation requires the licensed RAR program."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "decrypt",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "rar",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "rar",
+          "support" : {
+            "compressionMethods" : [
+              "store"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+              "rar5-aes256"
+            ],
+            "format" : "rar",
+            "limitations" : [
+              "Creation and repair only; extraction uses libarchive or 7-Zip.",
+              "Repair uses the archive's recovery record when present."
+            ],
+            "operations" : [
+              "create",
+              "repair",
+              "createSplit",
+              "encrypt",
+              "encryptFilenames",
+              "multithreaded"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "rar"
+      ],
+      "format" : "rar",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "RAR",
+      "notes" : "RAR 1.5–4.x (RAR4) and RAR 5. Creation requires the licensed RAR command-line tool.",
+      "signatures" : 2
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "store"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "readSplit",
+              "preserveMetadata",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "createSplit",
+              "readSplit",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "tar"
+      ],
+      "format" : "tar",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "TAR",
+      "signatures" : 1
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "deflate"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "gz",
+            "limitations" : [
+              "A compression stream holds exactly one file."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "readSplit",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "gz",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "createSplit",
+              "readSplit",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "gz",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "gz",
+        "gzip"
+      ],
+      "format" : "gz",
+      "isMultiFile" : false,
+      "kind" : "compressionStream",
+      "layers" : [
+
+      ],
+      "name" : "gzip",
+      "signatures" : 1
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "bzip2"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "bz2",
+            "limitations" : [
+              "A compression stream holds exactly one file."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "readSplit",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "bz2",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "createSplit",
+              "readSplit",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "bz2",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "bz2",
+        "bzip2"
+      ],
+      "format" : "bz2",
+      "isMultiFile" : false,
+      "kind" : "compressionStream",
+      "layers" : [
+
+      ],
+      "name" : "bzip2",
+      "signatures" : 1
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "xz"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "xz",
+            "limitations" : [
+              "A compression stream holds exactly one file."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "readSplit",
+              "streamingRead",
+              "streamingWrite",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "xz",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "createSplit",
+              "readSplit",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "xz",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "xz"
+      ],
+      "format" : "xz",
+      "isMultiFile" : false,
+      "kind" : "compressionStream",
+      "layers" : [
+
+      ],
+      "name" : "XZ",
+      "signatures" : 1
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "lzma"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "lzma",
+            "limitations" : [
+              "A compression stream holds exactly one file."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "readSplit",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "lzma",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "lzma",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "lzma"
+      ],
+      "format" : "lzma",
+      "isMultiFile" : false,
+      "kind" : "compressionStream",
+      "layers" : [
+
+      ],
+      "name" : "LZMA (alone)",
+      "signatures" : 1
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "zstd"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zst",
+            "limitations" : [
+              "A compression stream holds exactly one file."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "readSplit",
+              "streamingRead",
+              "streamingWrite",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        }
+      ],
+      "extensions" : [
+        "zst",
+        "zstd"
+      ],
+      "format" : "zst",
+      "isMultiFile" : false,
+      "kind" : "compressionStream",
+      "layers" : [
+
+      ],
+      "name" : "Zstandard",
+      "signatures" : 1
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "lz4"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "lz4",
+            "limitations" : [
+              "A compression stream holds exactly one file."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "readSplit",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        }
+      ],
+      "extensions" : [
+        "lz4"
+      ],
+      "format" : "lz4",
+      "isMultiFile" : false,
+      "kind" : "compressionStream",
+      "layers" : [
+
+      ],
+      "name" : "LZ4",
+      "signatures" : 1
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "brotli"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "br",
+            "limitations" : [
+              "Implemented with the Brotli reference library (MIT) layered under libarchive.",
+              "A compression stream holds exactly one file."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        }
+      ],
+      "extensions" : [
+        "br"
+      ],
+      "format" : "br",
+      "isMultiFile" : false,
+      "kind" : "compressionStream",
+      "layers" : [
+
+      ],
+      "name" : "Brotli",
+      "notes" : "Brotli streams have no magic number; detection relies on the .br extension.",
+      "signatures" : 0
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "lzip"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "lz",
+            "limitations" : [
+              "A compression stream holds exactly one file."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "readSplit",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        }
+      ],
+      "extensions" : [
+        "lz"
+      ],
+      "format" : "lz",
+      "isMultiFile" : false,
+      "kind" : "compressionStream",
+      "layers" : [
+
+      ],
+      "name" : "Lzip",
+      "signatures" : 1
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "lzw"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "Z",
+            "limitations" : [
+              "A compression stream holds exactly one file."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "readSplit",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "Z",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "Z",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "z"
+      ],
+      "format" : "Z",
+      "isMultiFile" : false,
+      "kind" : "compressionStream",
+      "layers" : [
+
+      ],
+      "name" : "Unix compress",
+      "signatures" : 1
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "deflate"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar.gz",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "readSplit",
+              "preserveMetadata",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar.gz",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "tar.gz",
+        "tgz"
+      ],
+      "format" : "tar.gz",
+      "isMultiFile" : true,
+      "kind" : "compressedArchive",
+      "layers" : [
+        "gz",
+        "tar"
+      ],
+      "name" : "TAR + gzip",
+      "signatures" : 0
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "bzip2"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar.bz2",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "readSplit",
+              "preserveMetadata",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar.bz2",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "tar.bz2",
+        "tbz",
+        "tbz2",
+        "tb2"
+      ],
+      "format" : "tar.bz2",
+      "isMultiFile" : true,
+      "kind" : "compressedArchive",
+      "layers" : [
+        "bz2",
+        "tar"
+      ],
+      "name" : "TAR + bzip2",
+      "signatures" : 0
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "xz"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar.xz",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "readSplit",
+              "preserveMetadata",
+              "streamingRead",
+              "streamingWrite",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar.xz",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "tar.xz",
+        "txz"
+      ],
+      "format" : "tar.xz",
+      "isMultiFile" : true,
+      "kind" : "compressedArchive",
+      "layers" : [
+        "xz",
+        "tar"
+      ],
+      "name" : "TAR + XZ",
+      "signatures" : 0
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "lzma"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar.lzma",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "readSplit",
+              "preserveMetadata",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar.lzma",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "tar.lzma",
+        "tlz"
+      ],
+      "format" : "tar.lzma",
+      "isMultiFile" : true,
+      "kind" : "compressedArchive",
+      "layers" : [
+        "lzma",
+        "tar"
+      ],
+      "name" : "TAR + LZMA",
+      "signatures" : 0
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "zstd"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar.zst",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "readSplit",
+              "preserveMetadata",
+              "streamingRead",
+              "streamingWrite",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        }
+      ],
+      "extensions" : [
+        "tar.zst",
+        "tar.zstd",
+        "tzst"
+      ],
+      "format" : "tar.zst",
+      "isMultiFile" : true,
+      "kind" : "compressedArchive",
+      "layers" : [
+        "zst",
+        "tar"
+      ],
+      "name" : "TAR + Zstandard",
+      "signatures" : 0
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "lz4"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar.lz4",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "readSplit",
+              "preserveMetadata",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        }
+      ],
+      "extensions" : [
+        "tar.lz4"
+      ],
+      "format" : "tar.lz4",
+      "isMultiFile" : true,
+      "kind" : "compressedArchive",
+      "layers" : [
+        "lz4",
+        "tar"
+      ],
+      "name" : "TAR + LZ4",
+      "signatures" : 0
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "brotli"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar.br",
+            "limitations" : [
+              "Implemented with the Brotli reference library (MIT) layered under libarchive."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "preserveMetadata",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        }
+      ],
+      "extensions" : [
+        "tar.br"
+      ],
+      "format" : "tar.br",
+      "isMultiFile" : true,
+      "kind" : "compressedArchive",
+      "layers" : [
+        "br",
+        "tar"
+      ],
+      "name" : "TAR + Brotli",
+      "signatures" : 0
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "lzip"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar.lz",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "readSplit",
+              "preserveMetadata",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        }
+      ],
+      "extensions" : [
+        "tar.lz"
+      ],
+      "format" : "tar.lz",
+      "isMultiFile" : true,
+      "kind" : "compressedArchive",
+      "layers" : [
+        "lz",
+        "tar"
+      ],
+      "name" : "TAR + Lzip",
+      "signatures" : 0
+    },
+    {
+      "category" : "A",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "lzw"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar.Z",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "readSplit",
+              "preserveMetadata",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ],
+            "streaming" : "Streaming: memory use is bounded and independent of archive size."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar.Z",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "tar.z",
+        "taz"
+      ],
+      "format" : "tar.Z",
+      "isMultiFile" : true,
+      "kind" : "compressedArchive",
+      "layers" : [
+        "Z",
+        "tar"
+      ],
+      "name" : "TAR + compress",
+      "signatures" : 0
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cpio",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "preserveMetadata",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cpio",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cpio",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "cpio"
+      ],
+      "format" : "cpio",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "CPIO",
+      "signatures" : 5
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "xar",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "preserveMetadata",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "xar",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "xar"
+      ],
+      "format" : "xar",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "XAR",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "ar",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "modify",
+              "test",
+              "streamingRead",
+              "streamingWrite",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "ar",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "ar",
+        "a"
+      ],
+      "format" : "ar",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "Unix ar",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cab",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cab",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cab",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "cab"
+      ],
+      "format" : "cab",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "Microsoft Cabinet",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "lha",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "lha",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "lha",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "lha",
+        "lzh"
+      ],
+      "format" : "lha",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "LHA \/ LZH",
+      "signatures" : 2
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "arj",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "arj",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "arj"
+      ],
+      "format" : "arj",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "ARJ",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "ace",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line).",
+              "ACE 1.x only; ACE 2 archives are not supported by any open decoder."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "ace"
+      ],
+      "format" : "ace",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "ACE",
+      "notes" : "No maintained, legally distributable ACE 2 decoder exists. ACE 1.x is readable through unar where installed.",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "wim",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "createSplit",
+              "readSplit",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "wim",
+        "swm",
+        "esd"
+      ],
+      "format" : "wim",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "Windows Imaging (WIM\/ESD)",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "external-tools",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zpaq",
+            "limitations" : [
+              "Extracts the latest version stored in the journaling archive."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "zpaq"
+      ],
+      "format" : "zpaq",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "ZPAQ",
+      "notes" : "Readable when the zpaq reference tool is installed. Not bundled.",
+      "signatures" : 2
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "arc",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "external-tools",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "arc",
+            "limitations" : [
+              "ARC has no folders; names are restored with their original case."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "arc",
+        "ark"
+      ],
+      "format" : "arc",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "ARC",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zoo",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "zoo"
+      ],
+      "format" : "zoo",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "Zoo",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "alz",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "alz"
+      ],
+      "format" : "alz",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "ALZip",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "egg",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "egg"
+      ],
+      "format" : "egg",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "EGG",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "lzo",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "external-tools",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "lzo",
+            "limitations" : [
+              "A compression stream holds exactly one file."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "lzo",
+        "lzop"
+      ],
+      "format" : "lzo",
+      "isMultiFile" : false,
+      "kind" : "compressionStream",
+      "layers" : [
+
+      ],
+      "name" : "lzop",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "external-tools",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "lrz",
+            "limitations" : [
+              "A compression stream holds exactly one file."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "lrz"
+      ],
+      "format" : "lrz",
+      "isMultiFile" : false,
+      "kind" : "compressionStream",
+      "layers" : [
+
+      ],
+      "name" : "lrzip",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "nsis",
+            "limitations" : [
+              "Installer contents are listed and extracted; the installer is never run."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "nsis",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "exe"
+      ],
+      "format" : "nsis",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "NSIS installer",
+      "notes" : "Browsing only. Installers are never executed.",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "chm",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "chm",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "chm"
+      ],
+      "format" : "chm",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "Compiled HTML Help",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "msi",
+            "limitations" : [
+              "Installer contents are listed and extracted; the installer is never run."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "msi",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "msi",
+        "msp"
+      ],
+      "format" : "msi",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "Windows Installer",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "rpm",
+            "limitations" : [
+              "Payload is listed and extracted; scriptlets are never executed."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "rpm",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "rpm"
+      ],
+      "format" : "rpm",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "RPM package",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "ar",
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "deb",
+            "limitations" : [
+              "Shows the package's control and data archives; install scripts are never run."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "deb",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "deb",
+        "udeb"
+      ],
+      "format" : "deb",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "Debian package",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "warc",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "warc",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "warc"
+      ],
+      "format" : "warc",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "Web ARChive",
+      "signatures" : 1
+    },
+    {
+      "category" : "B",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "shar",
+            "limitations" : [
+              "Shell archives are written only; reading would require executing a script."
+            ],
+            "operations" : [
+              "create"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "shar"
+      ],
+      "format" : "shar",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "Shell archive",
+      "notes" : "Shell archives are scripts. They are parsed, never executed.",
+      "signatures" : 1
+    },
+    {
+      "category" : "C",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "sit",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line).",
+              "StuffIt 1.5–5.5 supported; encrypted StuffIt archives are not."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "sit"
+      ],
+      "format" : "sit",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "StuffIt",
+      "signatures" : 3
+    },
+    {
+      "category" : "C",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "sitx",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line).",
+              "StuffIt X: only some compression methods are implemented; encrypted and some newer archives cannot be read."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "sitx"
+      ],
+      "format" : "sitx",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "StuffIt X",
+      "notes" : "Partial support only: some SITX compression methods and encryption are not implemented by any open decoder.",
+      "signatures" : 1
+    },
+    {
+      "category" : "C",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cpt",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "cpt"
+      ],
+      "format" : "cpt",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "Compact Pro",
+      "signatures" : 1
+    },
+    {
+      "category" : "C",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "pit",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "pit"
+      ],
+      "format" : "pit",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "PackIt",
+      "signatures" : 2
+    },
+    {
+      "category" : "C",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "dd",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "dd"
+      ],
+      "format" : "dd",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "DiskDoubler",
+      "signatures" : 0
+    },
+    {
+      "category" : "C",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "bin.macbinary",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line).",
+              "Resource forks are written as AppleDouble (._) files on non-Mac volumes."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "macbin",
+        "bin"
+      ],
+      "format" : "bin.macbinary",
+      "isMultiFile" : false,
+      "kind" : "encoding",
+      "layers" : [
+
+      ],
+      "name" : "MacBinary",
+      "notes" : "The .bin extension is ambiguous (CD images also use it); content is checked before MacBinary is assumed.",
+      "signatures" : 0
+    },
+    {
+      "category" : "C",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "hqx",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line).",
+              "Resource forks are written as AppleDouble (._) files on non-Mac volumes."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "hqx"
+      ],
+      "format" : "hqx",
+      "isMultiFile" : false,
+      "kind" : "encoding",
+      "layers" : [
+
+      ],
+      "name" : "BinHex 4",
+      "signatures" : 1
+    },
+    {
+      "category" : "C",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "applesingle",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line).",
+              "Resource forks are written as AppleDouble (._) files on non-Mac volumes."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "as"
+      ],
+      "format" : "applesingle",
+      "isMultiFile" : false,
+      "kind" : "encoding",
+      "layers" : [
+
+      ],
+      "name" : "AppleSingle",
+      "signatures" : 1
+    },
+    {
+      "category" : "C",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "appledouble",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line).",
+              "Resource forks are written as AppleDouble (._) files on non-Mac volumes."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+
+      ],
+      "format" : "appledouble",
+      "isMultiFile" : false,
+      "kind" : "encoding",
+      "layers" : [
+
+      ],
+      "name" : "AppleDouble",
+      "signatures" : 1
+    },
+    {
+      "category" : "D",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "lzx",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "lzx"
+      ],
+      "format" : "lzx",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "Amiga LZX",
+      "signatures" : 1
+    },
+    {
+      "category" : "D",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "adf",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "adf"
+      ],
+      "format" : "adf",
+      "isMultiFile" : true,
+      "kind" : "filesystemImage",
+      "layers" : [
+
+      ],
+      "name" : "Amiga Disk File",
+      "signatures" : 1
+    },
+    {
+      "category" : "D",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "dms",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "dms"
+      ],
+      "format" : "dms",
+      "isMultiFile" : true,
+      "kind" : "diskImage",
+      "layers" : [
+
+      ],
+      "name" : "Amiga DiskMasher",
+      "signatures" : 1
+    },
+    {
+      "category" : "D",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "pp",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "pp"
+      ],
+      "format" : "pp",
+      "isMultiFile" : false,
+      "kind" : "compressionStream",
+      "layers" : [
+
+      ],
+      "name" : "PowerPacker",
+      "signatures" : 1
+    },
+    {
+      "category" : "D",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "lbr",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "lbr"
+      ],
+      "format" : "lbr",
+      "isMultiFile" : true,
+      "kind" : "archive",
+      "layers" : [
+
+      ],
+      "name" : "CP\/M LBR",
+      "signatures" : 0
+    },
+    {
+      "category" : "D",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "sqz",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "sqz",
+        "qqq"
+      ],
+      "format" : "sqz",
+      "isMultiFile" : false,
+      "kind" : "compressionStream",
+      "layers" : [
+
+      ],
+      "name" : "Squeeze",
+      "signatures" : 1
+    },
+    {
+      "category" : "D",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "uue",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "uue",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "uue",
+        "uu"
+      ],
+      "format" : "uue",
+      "isMultiFile" : true,
+      "kind" : "encoding",
+      "layers" : [
+
+      ],
+      "name" : "uuencode",
+      "signatures" : 1
+    },
+    {
+      "category" : "D",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "xxe",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "xxe"
+      ],
+      "format" : "xxe",
+      "isMultiFile" : false,
+      "kind" : "encoding",
+      "layers" : [
+
+      ],
+      "name" : "XXEncode",
+      "signatures" : 1
+    },
+    {
+      "category" : "D",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "yenc",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "yenc",
+        "ync"
+      ],
+      "format" : "yenc",
+      "isMultiFile" : false,
+      "kind" : "encoding",
+      "layers" : [
+
+      ],
+      "name" : "yEnc",
+      "signatures" : 1
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "dmg",
+            "limitations" : [
+              "Reads the file systems inside the image without mounting it. Encrypted DMGs and some APFS images require mounting with Disk Utility."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "dmg",
+        "sparseimage",
+        "sparsebundle"
+      ],
+      "format" : "dmg",
+      "isMultiFile" : true,
+      "kind" : "diskImage",
+      "layers" : [
+
+      ],
+      "name" : "Apple Disk Image",
+      "notes" : "Browsing and extraction are read-only and never mount the image. Mounting requires explicit consent and uses hdiutil.",
+      "signatures" : 1
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "store"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "iso",
+            "limitations" : [
+              "ISO creation produces ISO 9660 with Rock Ridge and Joliet extensions."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "iso",
+            "limitations" : [
+              "Browsing and extraction only; the image is never mounted or modified."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "iso",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "iso",
+        "cdr"
+      ],
+      "format" : "iso",
+      "isMultiFile" : true,
+      "kind" : "filesystemImage",
+      "layers" : [
+
+      ],
+      "name" : "ISO 9660",
+      "signatures" : 1
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "udf",
+            "limitations" : [
+              "Browsing and extraction only; the image is never mounted or modified."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "udf"
+      ],
+      "format" : "udf",
+      "isMultiFile" : true,
+      "kind" : "filesystemImage",
+      "layers" : [
+
+      ],
+      "name" : "UDF",
+      "signatures" : 3
+    },
+    {
+      "category" : "E",
+      "engines" : [
+
+      ],
+      "extensions" : [
+        "img",
+        "ima",
+        "dd",
+        "raw"
+      ],
+      "format" : "img",
+      "isMultiFile" : true,
+      "kind" : "diskImage",
+      "layers" : [
+
+      ],
+      "name" : "Raw disk image",
+      "signatures" : 0
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "vhd",
+            "limitations" : [
+              "Browsing and extraction only; the image is never mounted or modified."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "vhd"
+      ],
+      "format" : "vhd",
+      "isMultiFile" : true,
+      "kind" : "diskImage",
+      "layers" : [
+
+      ],
+      "name" : "Virtual Hard Disk",
+      "signatures" : 2
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "vhdx",
+            "limitations" : [
+              "Browsing and extraction only; the image is never mounted or modified."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "vhdx"
+      ],
+      "format" : "vhdx",
+      "isMultiFile" : true,
+      "kind" : "diskImage",
+      "layers" : [
+
+      ],
+      "name" : "VHDX",
+      "signatures" : 1
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "vdi",
+            "limitations" : [
+              "Browsing and extraction only; the image is never mounted or modified."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "vdi"
+      ],
+      "format" : "vdi",
+      "isMultiFile" : true,
+      "kind" : "diskImage",
+      "layers" : [
+
+      ],
+      "name" : "VirtualBox Disk Image",
+      "signatures" : 1
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "vmdk",
+            "limitations" : [
+              "Browsing and extraction only; the image is never mounted or modified."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "vmdk"
+      ],
+      "format" : "vmdk",
+      "isMultiFile" : true,
+      "kind" : "diskImage",
+      "layers" : [
+
+      ],
+      "name" : "VMware Disk",
+      "signatures" : 2
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "qcow2",
+            "limitations" : [
+              "Browsing and extraction only; the image is never mounted or modified."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "qcow2",
+        "qcow"
+      ],
+      "format" : "qcow2",
+      "isMultiFile" : true,
+      "kind" : "diskImage",
+      "layers" : [
+
+      ],
+      "name" : "QEMU Copy-On-Write",
+      "signatures" : 1
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "squashfs",
+            "limitations" : [
+              "Browsing and extraction only; the image is never mounted or modified."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "squashfs",
+        "sqsh",
+        "sfs"
+      ],
+      "format" : "squashfs",
+      "isMultiFile" : true,
+      "kind" : "filesystemImage",
+      "layers" : [
+
+      ],
+      "name" : "SquashFS",
+      "signatures" : 2
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cramfs",
+            "limitations" : [
+              "Browsing and extraction only; the image is never mounted or modified."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "cramfs"
+      ],
+      "format" : "cramfs",
+      "isMultiFile" : true,
+      "kind" : "filesystemImage",
+      "layers" : [
+
+      ],
+      "name" : "CramFS",
+      "signatures" : 2
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "apfs",
+            "limitations" : [
+              "Browsing and extraction only; the image is never mounted or modified."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "apfs"
+      ],
+      "format" : "apfs",
+      "isMultiFile" : true,
+      "kind" : "filesystemImage",
+      "layers" : [
+
+      ],
+      "name" : "APFS volume image",
+      "signatures" : 1
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "hfs",
+            "limitations" : [
+              "Browsing and extraction only; the image is never mounted or modified."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "hfs",
+        "hfsx"
+      ],
+      "format" : "hfs",
+      "isMultiFile" : true,
+      "kind" : "filesystemImage",
+      "layers" : [
+
+      ],
+      "name" : "HFS \/ HFS+ image",
+      "signatures" : 2
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "fat",
+            "limitations" : [
+              "Browsing and extraction only; the image is never mounted or modified."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "fat"
+      ],
+      "format" : "fat",
+      "isMultiFile" : true,
+      "kind" : "filesystemImage",
+      "layers" : [
+
+      ],
+      "name" : "FAT image",
+      "signatures" : 2
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "ntfs",
+            "limitations" : [
+              "Browsing and extraction only; the image is never mounted or modified."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "ntfs"
+      ],
+      "format" : "ntfs",
+      "isMultiFile" : true,
+      "kind" : "filesystemImage",
+      "layers" : [
+
+      ],
+      "name" : "NTFS image",
+      "signatures" : 1
+    },
+    {
+      "category" : "E",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "ext",
+            "limitations" : [
+              "Browsing and extraction only; the image is never mounted or modified."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "ext2",
+        "ext3",
+        "ext4"
+      ],
+      "format" : "ext",
+      "isMultiFile" : true,
+      "kind" : "filesystemImage",
+      "layers" : [
+
+      ],
+      "name" : "ext2\/3\/4 image",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "zip",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "deflate",
+              "store"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "jar",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "jar",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "jar"
+      ],
+      "format" : "jar",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "Java Archive",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "zip",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "deflate",
+              "store"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "war",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "war",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "war"
+      ],
+      "format" : "war",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "Web Application Archive",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "zip",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "deflate",
+              "store"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "ear",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "ear",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "ear"
+      ],
+      "format" : "ear",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "Enterprise Application Archive",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "zip",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "apk",
+            "limitations" : [
+              "Signed packages are read-only: re-packing invalidates the signature."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "apk",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "apk"
+      ],
+      "format" : "apk",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "Android Package",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "zip",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "aab",
+            "limitations" : [
+              "Signed packages are read-only: re-packing invalidates the signature."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "aab",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "aab"
+      ],
+      "format" : "aab",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "Android App Bundle",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "zip",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "ipa",
+            "limitations" : [
+              "Signed packages are read-only: re-packing invalidates the signature."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "ipa",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "ipa"
+      ],
+      "format" : "ipa",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "iOS App Archive",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "zip",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "deflate",
+              "store"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "epub",
+            "limitations" : [
+              "EPUB creation stores the 'mimetype' file first and uncompressed, as the OCF specification requires. Content validity is not checked."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "epub",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "epub"
+      ],
+      "format" : "epub",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "EPUB",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "zip",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "deflate",
+              "store"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cbz",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cbz",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cbz",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "cbz"
+      ],
+      "format" : "cbz",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "Comic Book (ZIP)",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "zip",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "deflate",
+              "store"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "xpi",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "xpi",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "xpi"
+      ],
+      "format" : "xpi",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "Browser Extension",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "zip",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "deflate",
+              "store"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "vsix",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "vsix",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "vsix"
+      ],
+      "format" : "vsix",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "Visual Studio Extension",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "zip",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "appx",
+            "limitations" : [
+              "Signed packages are read-only: re-packing invalidates the signature."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "appx",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "appx",
+        "appxbundle"
+      ],
+      "format" : "appx",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "Windows App Package",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "zip",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "msix",
+            "limitations" : [
+              "Signed packages are read-only: re-packing invalidates the signature."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "msix",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "zip",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "msix",
+        "msixbundle"
+      ],
+      "format" : "msix",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "MSIX Package",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "rar",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cbr",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cbr",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cbr",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "rar",
+          "support" : {
+            "compressionMethods" : [
+              "store"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+              "rar5-aes256"
+            ],
+            "format" : "cbr",
+            "limitations" : [
+              "Creation and repair only; extraction uses libarchive or 7-Zip.",
+              "Repair uses the archive's recovery record when present."
+            ],
+            "operations" : [
+              "create",
+              "repair",
+              "createSplit",
+              "encrypt",
+              "encryptFilenames",
+              "multithreaded"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "cbr"
+      ],
+      "format" : "cbr",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "Comic Book (RAR)",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "7z",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+              "store",
+              "lzma2",
+              "lzma",
+              "deflate",
+              "bzip2",
+              "ppmd"
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cb7",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cb7",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "readSplit",
+              "multithreaded",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "7z",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "cb7"
+      ],
+      "format" : "cb7",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "Comic Book (7z)",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "tar",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cbt",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "create",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "cbt",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "unar",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "tar",
+            "limitations" : [
+              "Encrypted archives are not handled by this engine (its tools require passwords on the command line)."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "preserveMetadata",
+              "selectiveExtract"
+            ]
+          }
+        }
+      ],
+      "extensions" : [
+        "cbt"
+      ],
+      "format" : "cbt",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "Comic Book (TAR)",
+      "signatures" : 1
+    },
+    {
+      "baseFormat" : "xar",
+      "category" : "F",
+      "engines" : [
+        {
+          "available" : true,
+          "engine" : "libarchive",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "pkg",
+            "limitations" : [
+              "Read-only; modifying a signed installer invalidates its signature."
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "streamingRead",
+              "selectiveExtract"
+            ]
+          }
+        },
+        {
+          "available" : true,
+          "engine" : "7zip",
+          "support" : {
+            "compressionMethods" : [
+
+            ],
+            "decryptionMethods" : [
+
+            ],
+            "encryptionMethods" : [
+
+            ],
+            "format" : "pkg",
+            "limitations" : [
+
+            ],
+            "operations" : [
+              "inspect",
+              "extract",
+              "test",
+              "readSplit",
+              "selectiveExtract"
+            ],
+            "threading" : "Multithreaded LZMA2\/BZip2\/Deflate compression."
+          }
+        }
+      ],
+      "extensions" : [
+        "pkg",
+        "mpkg"
+      ],
+      "format" : "pkg",
+      "isMultiFile" : true,
+      "kind" : "package",
+      "layers" : [
+
+      ],
+      "name" : "macOS Installer Package",
+      "notes" : "Browsing and extraction only. Installers are never run, and modifying a signed package invalidates its signature.",
+      "signatures" : 1
+    },
+    {
+      "category" : "G",
+      "engines" : [
+
+      ],
+      "extensions" : [
+        "aar",
+        "yaa"
+      ],
+      "format" : "aar",
+      "isMultiFile" : true,
+      "kind" : "appleArchive",
+      "layers" : [
+
+      ],
+      "name" : "Apple Archive",
+      "signatures" : 7
+    },
+    {
+      "category" : "G",
+      "engines" : [
+
+      ],
+      "extensions" : [
+        "aea"
+      ],
+      "format" : "aea",
+      "isMultiFile" : true,
+      "kind" : "appleArchive",
+      "layers" : [
+
+      ],
+      "name" : "Apple Encrypted Archive",
+      "signatures" : 1
+    }
+  ],
+  "generatedBy" : "archiver formats --json"
+}

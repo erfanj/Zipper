@@ -260,3 +260,38 @@ public enum StagingImporter {
         try walk(staging, "")
     }
 }
+
+/// Caches the output of capability probes (`7z i`, `lsar -v`, `rar -iver`) keyed by the helper's
+/// path, size and modification time, so launching the app or CLI doesn't start helper processes.
+/// A changed or updated helper is probed again automatically.
+enum ProbeCache {
+    struct Entry: Codable {
+        var key: String
+        var status: Int32
+        var stdout: String
+    }
+
+    static let directory: URL = {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
+        return base.appendingPathComponent("UniversalArchiver/probes", isDirectory: true)
+    }()
+
+    static func run(_ exe: URL, _ args: [String]) -> (status: Int32, stdout: String)? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: exe.resolvingSymlinksInPath().path) else { return nil }
+        let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
+        let mtime = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let key = "\(exe.path)|\(size)|\(mtime)|\(args.joined(separator: " "))"
+        let h = StreamingHasher(.sha256)
+        h.update(Data(key.utf8))
+        let file = directory.appendingPathComponent(String(h.finalizeHex().prefix(24)) + ".json")
+        if let d = try? Data(contentsOf: file), let e = try? JSONDecoder().decode(Entry.self, from: d), e.key == key {
+            return (e.status, e.stdout)
+        }
+        guard let r = try? HelperProcess(exe, args).run() else { return nil }
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if let d = try? JSONEncoder().encode(Entry(key: key, status: r.status, stdout: r.stdout + (r.stdout.isEmpty ? r.stderr : ""))) {
+            try? d.write(to: file, options: .atomic)
+        }
+        return (r.status, r.stdout + (r.stdout.isEmpty ? r.stderr : ""))
+    }
+}

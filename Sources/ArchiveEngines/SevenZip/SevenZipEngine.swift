@@ -34,7 +34,7 @@ public final class SevenZipEngine: ArchiveEngine, @unchecked Sendable {
         var number = 0.0
         var creatable = Set<String>()
         var readable = Set<String>()
-        if let exe = executable, let info = try? HelperProcess(exe, ["i"]).run(), info.status == 0 {
+        if let exe = executable, let info = ProbeCache.run(exe, ["i"]), info.status == 0 {
             let text = info.stdout
             if let m = text.range(of: #"7-Zip (\(z\) )?([0-9]+\.[0-9]+)"#, options: .regularExpression) {
                 let s = String(text[m])

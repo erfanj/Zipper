@@ -26,8 +26,8 @@ public final class UnarEngine: ArchiveEngine, @unchecked Sendable {
         self.lsar = lsar
         self.unar = unar
         var version: String?
-        if let l = lsar, let r = try? HelperProcess(l, ["-v"]).run() {
-            version = r.combined.components(separatedBy: CharacterSet.whitespacesAndNewlines).first { $0.first?.isNumber == true }
+        if let l = lsar, let r = ProbeCache.run(l, ["-v"]) {
+            version = r.stdout.components(separatedBy: CharacterSet.whitespacesAndNewlines).first { $0.first?.isNumber == true }
         }
         let ok = lsar != nil && unar != nil
         descriptor = EngineDescriptor(
