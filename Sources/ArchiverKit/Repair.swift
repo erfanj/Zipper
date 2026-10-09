@@ -225,6 +225,7 @@ extension ArchiveService {
             let data = try Data(contentsOf: url, options: .alwaysMapped)
             let (entries, problems) = ZipRebuilder.scan(data)
             a.problems += problems
+            a.problems += ZipStructure.problems(url)
             a.canRebuildStructure = !entries.isEmpty
         }
         // Decode everything in salvage mode, writing nothing.
@@ -301,5 +302,57 @@ extension ArchiveService {
         if let s = log.stoppedEarly { report.stoppedEarly = s }
         report.notes += notes
         return report
+    }
+}
+
+/// Checks a ZIP's end-of-central-directory record and central directory. Some decoders (including
+/// libarchive) can still read entries without a central directory, but most applications —
+/// Finder, Windows Explorer, unzip — cannot, so a missing or damaged directory is reported.
+enum ZipStructure {
+    static func problems(_ url: URL) -> [String] {
+        guard let fh = FileHandle(forReadingAtPath: url.path) else { return [] }
+        defer { try? fh.close() }
+        let size = fh.seekToEndOfFile()
+        guard size >= 22 else { return ["The file is too small to be a ZIP archive."] }
+        let tailLen = min(size, 65_557)
+        fh.seek(toFileOffset: size - tailLen)
+        let tail = [UInt8](fh.readData(ofLength: Int(tailLen)))
+        var eocd = -1
+        var i = tail.count - 22
+        while i >= 0 {
+            if tail[i] == 0x50, tail[i + 1] == 0x4B, tail[i + 2] == 0x05, tail[i + 3] == 0x06 { eocd = i; break }
+            i -= 1
+        }
+        guard eocd >= 0 else {
+            return ["The ZIP's central directory (its table of contents) is missing — the file is probably incomplete. Most apps can't open it; Repair can rebuild it."]
+        }
+        func u32(_ a: [UInt8], _ o: Int) -> UInt64 { UInt64(a[o]) | UInt64(a[o + 1]) << 8 | UInt64(a[o + 2]) << 16 | UInt64(a[o + 3]) << 24 }
+        var cdSize = u32(tail, eocd + 12)
+        var cdOffset = u32(tail, eocd + 16)
+        if cdOffset == 0xFFFFFFFF || cdSize == 0xFFFFFFFF {
+            // ZIP64: locator precedes the EOCD.
+            guard eocd >= 20, tail[eocd - 20] == 0x50, tail[eocd - 19] == 0x4B, tail[eocd - 18] == 0x06, tail[eocd - 17] == 0x07 else {
+                return ["The ZIP64 end-of-directory locator is missing or damaged."]
+            }
+            let loc = u32(tail, eocd - 20 + 8) | u32(tail, eocd - 20 + 12) << 32
+            fh.seek(toFileOffset: loc)
+            let rec = [UInt8](fh.readData(ofLength: 56))
+            guard rec.count == 56, rec[0] == 0x50, rec[1] == 0x4B, rec[2] == 0x06, rec[3] == 0x06 else { return ["The ZIP64 end-of-directory record is damaged."] }
+            cdSize = u32(rec, 40) | u32(rec, 44) << 32
+            cdOffset = u32(rec, 48) | u32(rec, 52) << 32
+        }
+        let eocdAbs = size - tailLen + UInt64(eocd)
+        guard cdOffset + cdSize <= eocdAbs else {
+            return ["The central directory points beyond the end of the file — the archive is truncated or damaged."]
+        }
+        fh.seek(toFileOffset: cdOffset)
+        let sig = [UInt8](fh.readData(ofLength: 4))
+        if sig == [0x50, 0x4B, 0x01, 0x02] || cdSize == 0 { return [] }
+        // Data prepended to the archive (self-extractors) shifts offsets; accept a directory found by size.
+        if eocdAbs >= cdSize {
+            fh.seek(toFileOffset: eocdAbs - cdSize)
+            if [UInt8](fh.readData(ofLength: 4)) == [0x50, 0x4B, 0x01, 0x02] { return [] }
+        }
+        return ["The ZIP's central directory is damaged."]
     }
 }

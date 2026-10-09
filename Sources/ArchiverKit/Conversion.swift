@@ -116,7 +116,7 @@ extension ArchiveService {
 
         progress.setPhase("Compressing")
         var settings = request.settings
-        settings.includeRootFolder = false
+        settings.includeRootFolder = true // the staged top-level items are the roots
         settings.grouping = .single
         let items = ((try? fm.contentsOfDirectory(atPath: work.path)) ?? []).sorted().map { work.appendingPathComponent($0) }
         guard !items.isEmpty else { throw ArchiveError.verificationFailed(details: "The source archive contained no extractable items.") }

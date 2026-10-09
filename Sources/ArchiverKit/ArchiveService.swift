@@ -132,7 +132,13 @@ public final class ArchiveService: @unchecked Sendable {
             }
             return r
         }
-        return report
+        var final = report
+        let container = FormatCatalog.descriptor(for: detection.format)?.effectiveContainer ?? detection.format
+        if container == .zip, detection.multipart == nil {
+            for p in ZipStructure.problems(url) { final.issues.append(.init(entry: nil, message: p, code: "damaged")) }
+            final.checks.append("ZIP central directory structure")
+        }
+        return final
     }
 
     // MARK: Engine choice for creation

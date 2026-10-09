@@ -1,6 +1,11 @@
 import Foundation
 import ArchiveCore
 import ArchiveEngines
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// One change to an archive's contents. Paths are archive-internal, `/`-separated.
 public enum ArchiveEdit: Sendable, Equatable {
@@ -204,7 +209,7 @@ extension ArchiveService {
         // 3. Recompress to a temporary archive.
         progress.setPhase("Writing archive")
         var s = settings
-        s.includeRootFolder = false
+        s.includeRootFolder = true // the staged top-level items are the roots
         s.grouping = .single
         let items = ((try? fm.contentsOfDirectory(atPath: tree.path)) ?? []).sorted().map { tree.appendingPathComponent($0) }
         let engine = try creationEngine(format: opened.detection.format, settings: s)
@@ -226,7 +231,10 @@ extension ArchiveService {
         }
 
         // 5. Atomically swap it in (the original survives any failure up to this point).
-        _ = try fm.replaceItemAt(request.archive, withItemAt: tempArchive, backupItemName: nil, options: [])
+        // rename(2) replaces the original atomically: readers see either the old or the new archive.
+        guard rename(tempArchive.path, request.archive.path) == 0 else {
+            throw ArchiveError.io(path: request.archive.path, code: errno, message: String(cString: strerror(errno)))
+        }
         return ModifyOutcome(archive: request.archive, strategy: "rebuilt via verified temporary copy (\(engine.descriptor.name))",
                              verification: report, entryCount: newListing.entries.count, warnings: warnings)
     }

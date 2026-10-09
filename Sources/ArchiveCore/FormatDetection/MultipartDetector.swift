@@ -85,7 +85,8 @@ public enum MultipartDetector {
     public static func detect(_ url: URL, fileManager: FileManager = .default) -> MultipartSet? {
         let dir = url.deletingLastPathComponent()
         let name = url.lastPathComponent
-        let siblings = (try? fileManager.contentsOfDirectory(atPath: dir.path)) ?? []
+        var siblings = (try? fileManager.contentsOfDirectory(atPath: dir.path)) ?? []
+        if !siblings.contains(name) { siblings.append(name) } // naming alone defines the set
         let lowerSiblings = Dictionary(siblings.map { ($0.lowercased(), $0) }, uniquingKeysWith: { a, _ in a })
 
         func existing(_ candidate: String) -> URL? {

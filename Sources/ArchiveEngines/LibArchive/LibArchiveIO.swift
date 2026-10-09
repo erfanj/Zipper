@@ -49,8 +49,9 @@ final class LAReader {
             }, nil)
         case .files:
             for v in source.volumes {
+                // Note: all stored properties are initialised, so throwing here runs deinit, which
+                // frees the handle. Freeing it here as well would be a double free.
                 guard FileManager.default.isReadableFile(atPath: v.path) else {
-                    archive_read_free(a)
                     if FileManager.default.fileExists(atPath: v.path) { throw ArchiveError.permissionDenied(path: v.path) }
                     throw source.volumes.count > 1 ? ArchiveError.missingVolume(expected: [v.lastPathComponent]) : ArchiveError.fileNotFound(path: v.path)
                 }
@@ -69,9 +70,6 @@ final class LAReader {
         if rc != LA.ok {
             let msg = LA.errorString(a)
             let err = archive_errno(a)
-            archive_read_free(a)
-            for p in cPaths { free(p) }
-            cPaths = []
             if let e = brotli?.error { throw e }
             throw LibArchiveErrorMapper.map(msg, archive: source.url, entry: nil, errnoValue: err)
         }
