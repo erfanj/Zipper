@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// Classifies files by extension (cheap) for filtering and the advisor.
 public enum FileClassifier {
@@ -107,10 +112,14 @@ public enum SourceCollector {
         }
 
         func walk(_ dir: URL, prefix: String, base: URL) {
-            let real = dir.resolvingSymlinksInPath().path
-            guard visited.insert(real).inserted else {
-                out.excluded.append((prefix, "symbolic link loop"))
-                return
+            // Loop detection by device + inode (stat follows links). Path-based checks fail on very
+            // long paths, which would wrongly drop deep folders.
+            var st = stat()
+            if stat(dir.path, &st) == 0 {
+                guard visited.insert("\(st.st_dev):\(st.st_ino)").inserted else {
+                    out.excluded.append((prefix, "symbolic link loop"))
+                    return
+                }
             }
             let names: [String]
             do { names = try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted() } catch {
