@@ -52,7 +52,24 @@ symlinks), tree comparison and a process runner.
 Recorded from the run described in [VerifiedFeatures.md](VerifiedFeatures.md) (Linux x86_64,
 Swift 6.1.3, libarchive 3.7.x system package, 7-Zip 23.01 + RAR plugin, RAR 7.00):
 
-_Final run in progress; results are added when it completes._
+Run on 2026-10-09 at commit "Fix use-after-free on cancelled compression…" with
+`UA_RUN_LARGE_TESTS=1 swift test --skip-build`:
+
+* **108 tests executed, 0 failures, 0 skipped**, in 373 s. All reference tools were installed, so
+  nothing was skipped.
+* `ForwardInteropTests.testAllReferenceFixtures`: 77 of 77 fixtures.
+* `CompressionServiceTests.testLargeFileOver4GBZip64`: 4.4 GB file, 66 s.
+* `StressTests.testStreamingKeepsMemoryBounded` with the large variant: 24 s.
+* `FuzzTests`, default 60 iterations × 11 formats = 660 mutated archives: no crash or escape.
+  Outcomes: 335 damaged, 167 still readable, 92 truncated, 40 checksum mismatches, 14 not
+  recognised, 12 rejected by an external tool.
+* `FuzzTests` again with `UA_FUZZ_ITERATIONS=150`, i.e. 1,650 archives: passed in 236 s. Outcomes:
+  816 damaged, 426 readable, 236 truncated, 98 checksum mismatches, 40 external tool, 33 not
+  recognised, 1 safety limit.
+
+The previous full run crashed in `StressTests.testCancelledCompressionLeavesNoOutput`. That was a
+real use-after-free in the libarchive writer's cancel path, now fixed, and the test was extended
+to assert that cancellation is prompt. See the commit history for details.
 
 ## Not covered by automated tests
 
