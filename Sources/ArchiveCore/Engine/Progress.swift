@@ -13,6 +13,7 @@ public struct ProgressSnapshot: Sendable, Equatable {
     public var elapsed: TimeInterval
     public var bytesPerSecond: Double
     public var warnings: Int
+    public var isPaused: Bool = false
 
     public var fraction: Double? {
         guard let t = totalBytes, t > 0 else {
@@ -50,6 +51,9 @@ public final class OperationProgress: @unchecked Sendable {
     public var throttle: TimeInterval = 0.1
     /// Child processes to terminate when cancelled.
     private var cancelHandlers: [() -> Void] = []
+    private var pauseHandlers: [(Bool) -> Void] = []
+    private var _paused = false
+    private let pauseCondition = NSCondition()
 
     public init() {}
 
@@ -63,6 +67,7 @@ public final class OperationProgress: @unchecked Sendable {
     }
 
     public func cancel() {
+        pauseCondition.lock(); _paused = false; pauseCondition.broadcast(); pauseCondition.unlock()
         lock.lock()
         _cancelled = true
         let handlers = cancelHandlers
@@ -79,12 +84,41 @@ public final class OperationProgress: @unchecked Sendable {
     }
 
     public func clearCancelHandlers() {
-        lock.lock(); cancelHandlers.removeAll(); lock.unlock()
+        lock.lock(); cancelHandlers.removeAll(); pauseHandlers.removeAll(); lock.unlock()
     }
 
-    /// Throws `ArchiveError.cancelled` if cancellation was requested.
+    /// Throws `ArchiveError.cancelled` if cancellation was requested. While paused, blocks here, so
+    /// in-process engines pause between blocks without leaving data in an inconsistent state.
     public func checkCancelled() throws {
+        pauseCondition.lock()
+        while _paused && !isCancelled { pauseCondition.wait(until: Date().addingTimeInterval(0.25)) }
+        pauseCondition.unlock()
         if isCancelled { throw ArchiveError.cancelled }
+    }
+
+    public var isPaused: Bool {
+        pauseCondition.lock(); defer { pauseCondition.unlock() }
+        return _paused
+    }
+
+    /// Pauses the operation. In-process engines stop at their next checkpoint; helper processes are
+    /// suspended with SIGSTOP and resumed with SIGCONT.
+    public func pause() { setPaused(true) }
+    public func resume() { setPaused(false) }
+
+    private func setPaused(_ p: Bool) {
+        pauseCondition.lock()
+        _paused = p
+        pauseCondition.broadcast()
+        pauseCondition.unlock()
+        lock.lock(); let handlers = pauseHandlers; lock.unlock()
+        handlers.forEach { $0(p) }
+        mutate { $0._phase = $0._phase }
+    }
+
+    /// Registers a handler that is told when the operation is paused (true) or resumed (false).
+    public func onPauseChange(_ handler: @escaping (Bool) -> Void) {
+        lock.lock(); pauseHandlers.append(handler); lock.unlock()
     }
 
     public func setPhase(_ phase: String) { mutate { $0._phase = phase } }
@@ -110,7 +144,7 @@ public final class OperationProgress: @unchecked Sendable {
         return ProgressSnapshot(
             phase: _phase, currentItem: _currentItem, totalBytes: _totalBytes, processedBytes: _processed,
             outputBytes: _output, totalItems: _totalItems, processedItems: _items, elapsed: elapsed,
-            bytesPerSecond: elapsed > 0 ? Double(_processed) / elapsed : 0, warnings: _warnings)
+            bytesPerSecond: elapsed > 0 ? Double(_processed) / elapsed : 0, warnings: _warnings, isPaused: _paused)
     }
 
     private func mutate(force: Bool = true, _ body: (OperationProgress) -> Void) {

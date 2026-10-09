@@ -69,7 +69,7 @@ enum LibArchiveErrorMapper {
         if m.contains("passphrase required") || m.contains("passphrase is required") || m.contains("password required") {
             return .passwordRequired(archive: archive.path)
         }
-        if m.contains("encrypt") && (m.contains("not supported") || m.contains("unsupported")) {
+        if m.contains("encrypt") && (m.contains("not supported") || m.contains("unsupported") || m.contains("unavailable")) {
             return .unsupportedEncryption(method: message)
         }
         if m.contains("hmac") || m.contains("authentication") {

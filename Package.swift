@@ -69,25 +69,30 @@ let package = Package(
             dependencies: ["ArchiverKit", "ArchiveEngines", "ArchiveCore"],
             exclude: ["Info.plist", "UniversalArchiver.entitlements"]
         ),
+        .target(
+            name: "UATestSupport",
+            dependencies: ["ArchiveCore"],
+            path: "Tests/UATestSupport"
+        ),
         .testTarget(
             name: "ArchiveCoreTests",
-            dependencies: ["ArchiveCore"]
+            dependencies: ["ArchiveCore", "UATestSupport"]
         ),
         .testTarget(
             name: "ArchiveEnginesTests",
-            dependencies: ["ArchiveEngines", "ArchiveCore", "ArchiverKit"]
+            dependencies: ["UATestSupport", "ArchiveEngines", "ArchiveCore", "ArchiverKit"]
         ),
         .testTarget(
             name: "ArchiverKitTests",
-            dependencies: ["ArchiverKit", "ArchiveEngines", "ArchiveCore"]
+            dependencies: ["UATestSupport", "ArchiverKit", "ArchiveEngines", "ArchiveCore"]
         ),
         .testTarget(
             name: "SecurityTests",
-            dependencies: ["ArchiverKit", "ArchiveEngines", "ArchiveCore"]
+            dependencies: ["UATestSupport", "ArchiverKit", "ArchiveEngines", "ArchiveCore"]
         ),
         .testTarget(
             name: "InteropTests",
-            dependencies: ["ArchiverKit", "ArchiveEngines", "ArchiveCore"]
+            dependencies: ["UATestSupport", "ArchiverKit", "ArchiveEngines", "ArchiveCore"]
         ),
     ]
 )

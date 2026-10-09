@@ -1,5 +1,6 @@
 import XCTest
 import ArchiveCore
+import UATestSupport
 @testable import ArchiveEngines
 
 final class SevenZipEngineTests: XCTestCase {

@@ -3,8 +3,8 @@ import XCTest
 import ArchiveCore
 
 /// Shared helpers for engine tests.
-enum TestFS {
-    static func tempDir(_ label: String = "t") -> URL {
+public enum TestFS {
+    public static func tempDir(_ label: String = "t") -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("ua-tests-\(label)-\(UUID().uuidString.prefix(8))", isDirectory: true)
         try! FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
@@ -12,7 +12,7 @@ enum TestFS {
     }
 
     @discardableResult
-    static func write(_ root: URL, _ rel: String, _ content: String) -> URL {
+    public static func write(_ root: URL, _ rel: String, _ content: String) -> URL {
         let url = root.appendingPathComponent(rel)
         try! FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try! Data(content.utf8).write(to: url)
@@ -20,7 +20,7 @@ enum TestFS {
     }
 
     @discardableResult
-    static func writeBytes(_ root: URL, _ rel: String, _ data: Data) -> URL {
+    public static func writeBytes(_ root: URL, _ rel: String, _ data: Data) -> URL {
         let url = root.appendingPathComponent(rel)
         try! FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try! data.write(to: url)
@@ -28,7 +28,7 @@ enum TestFS {
     }
 
     /// A small tree with Unicode names in several scripts, nested folders, an empty folder and binary data.
-    static func sampleTree(in parent: URL, name: String = "Sample") -> URL {
+    public static func sampleTree(in parent: URL, name: String = "Sample") -> URL {
         let root = parent.appendingPathComponent(name)
         write(root, "readme.txt", String(repeating: "Universal Archiver test line.\n", count: 200))
         write(root, "docs/فارسی.txt", "سلام دنیا")
@@ -48,7 +48,7 @@ enum TestFS {
     }
 
     /// Relative path → SHA-256 for every regular file under `root`.
-    static func digestTree(_ root: URL) -> [String: String] {
+    public static func digestTree(_ root: URL) -> [String: String] {
         var out: [String: String] = [:]
         let fm = FileManager.default
         guard let en = fm.enumerator(atPath: root.path) else { return out }
@@ -62,7 +62,7 @@ enum TestFS {
         return out
     }
 
-    static func directories(_ root: URL) -> Set<String> {
+    public static func directories(_ root: URL) -> Set<String> {
         var out = Set<String>()
         let fm = FileManager.default
         guard let en = fm.enumerator(atPath: root.path) else { return out }
@@ -75,7 +75,7 @@ enum TestFS {
         return out
     }
 
-    static func which(_ tool: String) -> String? {
+    public static func which(_ tool: String) -> String? {
         for dir in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"] {
             let p = dir + "/" + tool
             if FileManager.default.isExecutableFile(atPath: p) { return p }
@@ -85,7 +85,7 @@ enum TestFS {
 
     /// Runs a reference tool. Input is passed on stdin (used for passwords so they never appear in argv).
     @discardableResult
-    static func run(_ tool: String, _ args: [String], cwd: URL? = nil, stdin: String? = nil) throws -> (Int32, String) {
+    public static func run(_ tool: String, _ args: [String], cwd: URL? = nil, stdin: String? = nil) throws -> (Int32, String) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: tool)
         p.arguments = args

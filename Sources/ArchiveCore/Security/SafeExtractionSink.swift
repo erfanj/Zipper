@@ -95,10 +95,12 @@ public struct ExtractionReport: Codable, Sendable {
     public struct Item: Codable, Sendable, Hashable {
         public var path: String
         public var reason: String
+        public init(path: String, reason: String) { self.path = path; self.reason = reason }
     }
     public struct Rename: Codable, Sendable, Hashable {
         public var archivePath: String
         public var writtenAs: String
+        public init(archivePath: String, writtenAs: String) { self.archivePath = archivePath; self.writtenAs = writtenAs }
     }
 
     public var destination: String

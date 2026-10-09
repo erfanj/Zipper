@@ -96,6 +96,11 @@ public final class LibArchiveEngine: ArchiveEngine, @unchecked Sendable {
             t[streamID] = .init(format: streamID, operations: sops, compressionMethods: canWrite ? [method] : [], streaming: streamNote,
                                 limitations: ["A compression stream holds exactly one file."])
         }
+        // Brotli has no libarchive filter; it is layered in with Google's reference library.
+        t[.brotli] = .init(format: .brotli, operations: read.union([.create, .streamingWrite]), compressionMethods: [.brotli],
+                           streaming: streamNote, limitations: ["Implemented with the Brotli reference library (MIT) layered under libarchive.", "A compression stream holds exactly one file."])
+        t[.tarBrotli] = .init(format: .tarBrotli, operations: rw, compressionMethods: [.brotli], streaming: streamNote,
+                              limitations: ["Implemented with the Brotli reference library (MIT) layered under libarchive."])
         t[.cpio] = .init(format: .cpio, operations: rw)
         t[.ar] = .init(format: .ar, operations: rw.subtracting([.preserveMetadata]))
         t[.deb] = .init(format: .deb, operations: read, limitations: ["Shows the package's control and data archives; install scripts are never run."])
@@ -188,7 +193,14 @@ public final class LibArchiveEngine: ArchiveEngine, @unchecked Sendable {
             if r == LA.eof { break }
             if r == LA.retry { continue }
             if r == LA.warn { progress.warning() }
-            if r < LA.warn { throw reader.error(entry: nil) }
+            if r < LA.warn {
+                if let log = options.salvage {
+                    // Unreadable header: nothing after this point can be located reliably.
+                    log.stopped(reader.error(entry: nil).explanation)
+                    break
+                }
+                throw reader.error(entry: nil)
+            }
             guard let e = entryPtr else { break }
             var entry = ArchiveEntry.from(libarchive: e, index: index)
             index += 1
@@ -230,10 +242,22 @@ public final class LibArchiveEngine: ArchiveEngine, @unchecked Sendable {
                 try writer.commit()
             } catch {
                 writer.abort()
+                if let log = options.salvage, let ae = error as? ArchiveError, Self.isEntryLevel(ae) {
+                    log.record(entry.normalizedPath, ae.explanation)
+                    continue
+                }
                 throw error
             }
         }
         progress.setProcessed(reader.compressedBytesRead)
+    }
+
+    /// Errors confined to one entry's data, after which reading can continue with the next entry.
+    static func isEntryLevel(_ e: ArchiveError) -> Bool {
+        switch e {
+        case .checksumMismatch, .damaged, .unsupportedMethod, .authenticationFailed, .truncated: return true
+        default: return false
+        }
     }
 
     public func test(_ source: ArchiveSource, options: ReadOptions, progress: OperationProgress) throws -> IntegrityReport {

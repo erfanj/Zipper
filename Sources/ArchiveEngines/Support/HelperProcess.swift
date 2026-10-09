@@ -63,6 +63,9 @@ final class HelperProcess {
     /// Substrings that identify a password prompt.
     var promptMarkers: [String] = ["Enter password", "Verify password", "Reenter password"]
     var onStdoutChunk: ((String) -> Void)?
+    /// Written to stdin (followed by a NUL byte) as soon as the process starts, then stdin is closed.
+    /// Used for tools such as `hdiutil -stdinpass`.
+    var initialInput: Secret?
     var progress: OperationProgress?
 
     init(_ executable: URL, _ arguments: [String]) {
@@ -144,8 +147,22 @@ final class HelperProcess {
             cancelled = true
             p?.terminate()
         }
+        progress?.onPauseChange { [weak p] paused in
+            guard let p, p.isRunning else { return }
+            // Suspending a helper is safe: it simply stops being scheduled until resumed.
+            kill(p.processIdentifier, paused ? SIGSTOP : SIGCONT)
+        }
         do { try p.run() } catch {
             throw ArchiveError.engineUnavailable(EngineID(rawValue: executable.lastPathComponent), reason: error.localizedDescription)
+        }
+        if let input = initialInput {
+            input.withBytes { bytes in
+                var buf = bytes
+                buf.append(0)
+                stdinHandle.write(Data(buf))
+                for i in buf.indices { buf[i] = 0 }
+            }
+            try? stdinHandle.close()
         }
         p.waitUntilExit()
         outPipe.fileHandleForReading.readabilityHandler = nil
@@ -202,8 +219,8 @@ final class StagingDirectory {
 }
 
 /// Feeds a directory tree produced by a helper tool into an `ExtractionSink`.
-enum StagingImporter {
-    static func importTree(_ staging: URL, into sink: ExtractionSink, listing: [String: ArchiveEntry] = [:],
+public enum StagingImporter {
+    public static func importTree(_ staging: URL, into sink: ExtractionSink, listing: [String: ArchiveEntry] = [:],
                            progress: OperationProgress) throws {
         let fm = FileManager.default
         var index = 0

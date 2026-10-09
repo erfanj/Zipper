@@ -177,9 +177,8 @@ final class LibArchiveWriter {
         let output: LAOutput
         do { output = try LAOutput(fd: out.fd, brotliQuality: brotliQuality, progress: progress) } catch { out.discard(); throw error }
         let ctx = Unmanaged.passUnretained(output).toOpaque()
-        if container == .tar || container == .cpio || isRaw || FormatCatalog.descriptor(for: format)?.kind == .compressedArchive {
-            archive_write_set_bytes_in_last_block(a, 1)
-        }
+        // No padding of the final block: tape-style 10 KB blocking only wastes space on disk.
+        archive_write_set_bytes_in_last_block(a, 1)
         let openRC = archive_write_open(a, ctx, nil, { _, ctx, buf, len in
             guard let ctx else { return -1 }
             return Unmanaged<LAOutput>.fromOpaque(ctx).takeUnretainedValue().write(buf, len)

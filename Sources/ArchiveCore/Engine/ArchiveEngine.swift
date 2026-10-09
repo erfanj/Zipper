@@ -139,10 +139,40 @@ public struct ReadOptions: Sendable {
     public var passwordProvider: PasswordProvider?
     /// Legacy filename character set (e.g. "CP437", "CP932", "GBK", "CP1256"). Nil means automatic.
     public var filenameEncoding: String?
+    /// Disk images that cannot be read without mounting are mounted (read-only, hidden) only when
+    /// the user has explicitly allowed it for this operation.
+    public var allowMountingDiskImages: Bool
+    /// When set, engines skip entries whose data is damaged instead of stopping, and record them here.
+    public var salvage: SalvageLog?
 
-    public init(passwordProvider: PasswordProvider? = nil, filenameEncoding: String? = nil) {
+    public init(passwordProvider: PasswordProvider? = nil, filenameEncoding: String? = nil, allowMountingDiskImages: Bool = false,
+                salvage: SalvageLog? = nil) {
         self.passwordProvider = passwordProvider
         self.filenameEncoding = filenameEncoding
+        self.allowMountingDiskImages = allowMountingDiskImages
+        self.salvage = salvage
+    }
+}
+
+/// Collects entries that could not be recovered during a salvage (repair) extraction.
+public final class SalvageLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _failures: [(path: String, reason: String)] = []
+    public private(set) var stoppedEarly: String?
+
+    public init() {}
+
+    public func record(_ path: String, _ reason: String) {
+        lock.lock(); _failures.append((path, reason)); lock.unlock()
+    }
+
+    public func stopped(_ reason: String) {
+        lock.lock(); stoppedEarly = reason; lock.unlock()
+    }
+
+    public var failures: [(path: String, reason: String)] {
+        lock.lock(); defer { lock.unlock() }
+        return _failures
     }
 }
 
