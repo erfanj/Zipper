@@ -71,7 +71,8 @@ public final class EngineRegistry: @unchecked Sendable {
     }
 }
 
-public struct FormatCapabilityRow: Codable, Sendable {
+public struct FormatCapabilityRow: Codable, Sendable, Identifiable {
+    public var id: FormatID { format }
     public struct EngineEntry: Codable, Sendable {
         public var engine: EngineID
         public var available: Bool

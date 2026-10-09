@@ -1,0 +1,97 @@
+# XcodeGen spec: `brew install xcodegen && xcodegen generate` creates UniversalArchiver.xcodeproj.
+# The Xcode project is needed for the Quick Look extension and Shortcuts (App Intents metadata);
+# the main app and CLI can also be built with Scripts/build-app.sh using SwiftPM alone.
+#
+# Before generating: run Scripts/build-deps-macos.sh (static libarchive/xz/zstd/lz4/brotli + 7zz),
+# or install Homebrew's libarchive and brotli and set PKG_CONFIG_PATH accordingly.
+name: UniversalArchiver
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+    SWIFT_VERSION: "5.10"
+    ENABLE_HARDENED_RUNTIME: YES
+    ARCHS: "$(ARCHS_STANDARD)"            # arm64 + x86_64 for Release when Intel builds are wanted
+    ONLY_ACTIVE_ARCH[config=Debug]: YES
+    DEAD_CODE_STRIPPING: YES
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""                   # set your team ID to sign with a Developer ID
+packages:
+  UniversalArchiverKit:
+    path: .
+targets:
+  UniversalArchiver:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/UniversalArchiver
+        excludes: [LinuxStub.swift]
+    info:
+      path: Sources/UniversalArchiver/Info.plist
+    entitlements:
+      path: Sources/UniversalArchiver/UniversalArchiver.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.universalarchiver
+        PRODUCT_NAME: Universal Archiver
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    dependencies:
+      - package: UniversalArchiverKit
+        product: ArchiverKit
+      - package: UniversalArchiverKit
+        product: ArchiveEngines
+      - package: UniversalArchiverKit
+        product: ArchiveCore
+      - target: UniversalArchiverQuickLook
+        embed: true
+      - target: archiver
+        embed: false
+    postBuildScripts:
+      - name: Embed helpers (archiver CLI, 7zz)
+        script: |
+          set -e
+          HELPERS="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers"
+          mkdir -p "$HELPERS"
+          cp "${BUILT_PRODUCTS_DIR}/archiver" "$HELPERS/archiver"
+          if [ -x "${SRCROOT}/Vendor/macos/helpers/7zz" ]; then cp "${SRCROOT}/Vendor/macos/helpers/7zz" "$HELPERS/7zz"; fi
+          for h in "$HELPERS"/*; do codesign --force --options runtime --sign "${EXPANDED_CODE_SIGN_IDENTITY:--}" "$h"; done
+  UniversalArchiverQuickLook:
+    type: app-extension
+    platform: macOS
+    sources: [Integrations/QuickLook]
+    info:
+      path: Integrations/QuickLook/Info.plist
+    entitlements:
+      path: Integrations/QuickLook/QuickLook.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.universalarchiver.quicklook
+    dependencies:
+      - package: UniversalArchiverKit
+        product: ArchiveEngines
+      - package: UniversalArchiverKit
+        product: ArchiveCore
+      - sdk: QuickLookUI.framework
+  archiver:
+    type: tool
+    platform: macOS
+    sources: [Sources/archiver]
+    dependencies:
+      - package: UniversalArchiverKit
+        product: ArchiverKit
+      - package: UniversalArchiverKit
+        product: ArchiveEngines
+      - package: UniversalArchiverKit
+        product: ArchiveCore
+schemes:
+  UniversalArchiver:
+    build:
+      targets:
+        UniversalArchiver: all
+    test:
+      gatherCoverageData: true

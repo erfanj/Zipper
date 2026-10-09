@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  Direct (Developer ID) distribution: hardened runtime, not sandboxed, so "Extract Here" and
+  multi-volume sets work in any folder without extra prompts. No network or other privileged
+  entitlements are requested. See Packaging/UniversalArchiver-AppStore.entitlements for the
+  sandboxed configuration and Documentation/Security.md for the trade-offs.
+-->
+<dict>
+</dict>
+</plist>

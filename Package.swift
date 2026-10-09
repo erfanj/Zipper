@@ -67,7 +67,7 @@ let package = Package(
         .executableTarget(
             name: "UniversalArchiver",
             dependencies: ["ArchiverKit", "ArchiveEngines", "ArchiveCore"],
-            exclude: ["Info.plist", "UniversalArchiver.entitlements"]
+            exclude: ["Info.plist", "UniversalArchiver.entitlements", "Resources"]
         ),
         .target(
             name: "UATestSupport",

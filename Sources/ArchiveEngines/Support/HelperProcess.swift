@@ -12,7 +12,8 @@ public enum HelperLocator {
     /// Directories searched in order. The bundle's `Contents/Helpers` comes first.
     public static var searchDirectories: [String] = {
         var dirs: [String] = []
-        if let exec = Bundle.main.executableURL {
+        // Resolve symlinks so /usr/local/bin/archiver -> App.app/Contents/Helpers/archiver finds its siblings.
+        if let exec = Bundle.main.executableURL?.resolvingSymlinksInPath() {
             // Contents/MacOS/<exe> → Contents/Helpers
             let helpers = exec.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Helpers")
             dirs.append(helpers.path)
