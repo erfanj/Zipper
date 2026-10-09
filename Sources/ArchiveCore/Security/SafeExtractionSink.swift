@@ -249,6 +249,26 @@ public final class SafeExtractionSink: ExtractionSink {
         }
     }
 
+    /// Fast path for staged files: rename into place (same volume) instead of copying.
+    public func importFile(_ entry: ArchiveEntry, extras: EntryExtras, from url: URL) throws {
+        guard let writer = try begin(entry, extras: extras) else { return }
+        guard let fw = writer as? FileWriter else {
+            try? writer.commit()
+            return
+        }
+        do {
+            if try fw.adopt(path: url.path) {
+                try fw.commit()
+            } else {
+                fw.abort()
+                try copyFile(entry, extras: extras, from: url)
+            }
+        } catch {
+            fw.abort()
+            throw error
+        }
+    }
+
     public func finish() throws {
         if let w = activeWriter { w.abort(); activeWriter = nil }
         // Apply directory metadata deepest-first, after their contents were written.
@@ -578,7 +598,7 @@ public final class SafeExtractionSink: ExtractionSink {
 
     final class FileWriter: EntryDataWriter {
         weak var sink: SafeExtractionSink?
-        let fd: Int32
+        var fd: Int32
         let parentFD: Int32
         let tmpName: String
         let finalName: String
@@ -601,6 +621,25 @@ public final class SafeExtractionSink: ExtractionSink {
             self.entry = entry
             self.extras = extras
             self.replace = replace
+        }
+
+        /// Replaces the (empty) temporary file with `path` by renaming. Returns false if the file is on
+        /// another volume.
+        func adopt(path: String) throws -> Bool {
+            guard !closed, written == 0, let sink else { return false }
+            var st = stat()
+            guard lstat(path, &st) == 0, (st.st_mode & S_IFMT) == S_IFREG else { return false }
+            guard renameat(AT_FDCWD, path, parentFD, tmpName) == 0 else { return false }
+            let nfd = openat(parentFD, tmpName, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+            guard nfd >= 0 else { return false }
+            close(fd)
+            fd = nfd
+            written = UInt64(st.st_size)
+            var head = [UInt8](repeating: 0, count: 8)
+            let n = head.withUnsafeMutableBytes { pread(nfd, $0.baseAddress, 8, 0) }
+            header = n > 0 ? Array(head.prefix(n)) : []
+            try sink.account(bytes: Int(st.st_size), entryTotal: written, fd: fd)
+            return true
         }
 
         func write(_ bytes: UnsafeRawBufferPointer) throws {

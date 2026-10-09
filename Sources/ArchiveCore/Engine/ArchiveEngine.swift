@@ -185,6 +185,36 @@ public protocol ExtractionSink: AnyObject {
     func begin(_ entry: ArchiveEntry, extras: EntryExtras) throws -> EntryDataWriter?
     /// Called after the last entry. Applies deferred metadata and returns.
     func finish() throws
+    /// Imports a regular file that a helper tool already wrote to a private staging area.
+    /// Sinks may move it into place instead of copying.
+    func importFile(_ entry: ArchiveEntry, extras: EntryExtras, from url: URL) throws
+}
+
+public extension ExtractionSink {
+    func importFile(_ entry: ArchiveEntry, extras: EntryExtras, from url: URL) throws {
+        try copyFile(entry, extras: extras, from: url)
+    }
+
+    /// Streams `url` through `begin`/`write`/`commit`.
+    func copyFile(_ entry: ArchiveEntry, extras: EntryExtras, from url: URL) throws {
+        guard let writer = try begin(entry, extras: extras) else { return }
+        guard let fh = FileHandle(forReadingAtPath: url.path) else {
+            writer.abort()
+            throw ArchiveError.io(path: entry.path, code: 0, message: "staged file is missing")
+        }
+        defer { try? fh.close() }
+        do {
+            while true {
+                let chunk = fh.readData(ofLength: 1 << 20)
+                if chunk.isEmpty { break }
+                try chunk.withUnsafeBytes { try writer.write($0) }
+            }
+            try writer.commit()
+        } catch {
+            writer.abort()
+            throw error
+        }
+    }
 }
 
 public protocol EntryDataWriter: AnyObject {

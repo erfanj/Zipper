@@ -52,26 +52,20 @@ public protocol PasswordProvider: AnyObject, Sendable {
     func password(for archive: URL, reason: PasswordRequestReason) -> Secret?
 }
 
-/// A provider that always returns the same password (or none).
+/// A provider with a single known password (e.g. read from stdin by the CLI). It is offered whenever
+/// a password is required, and withheld once an engine reports it was wrong, so the same wrong
+/// password is never retried in a loop.
 public final class FixedPasswordProvider: PasswordProvider, @unchecked Sendable {
     private let secret: Secret?
-    private var used = 0
-    private let lock = NSLock()
-    /// How many times the same password may be offered (re-offering a wrong password is pointless).
-    public let maxAttempts: Int
 
-    public init(_ secret: Secret?, maxAttempts: Int = 1) {
+    public init(_ secret: Secret?) {
         self.secret = secret
-        self.maxAttempts = maxAttempts
     }
 
     public convenience init(_ string: String?) { self.init(string.map(Secret.init)) }
 
     public func password(for archive: URL, reason: PasswordRequestReason) -> Secret? {
-        lock.lock(); defer { lock.unlock() }
-        guard used < maxAttempts else { return nil }
-        used += 1
-        return secret
+        reason == .required ? secret : nil
     }
 }
 

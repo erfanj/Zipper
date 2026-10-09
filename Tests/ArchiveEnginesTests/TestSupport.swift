@@ -89,6 +89,10 @@ enum TestFS {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: tool)
         p.arguments = args
+        var env = ProcessInfo.processInfo.environment
+        env["LANG"] = "C.UTF-8"
+        env["LC_ALL"] = "C.UTF-8"
+        p.environment = env
         if let cwd { p.currentDirectoryURL = cwd }
         let out = Pipe()
         p.standardOutput = out
