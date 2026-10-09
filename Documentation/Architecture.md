@@ -100,7 +100,12 @@ that is linked into place only after the engine succeeds.
 
 Long operations take an `OperationProgress`: a thread-safe tracker that also carries cancellation
 and pause. In-process engines check it between blocks (pause blocks the worker at a checkpoint);
-helper processes are suspended with `SIGSTOP`/`SIGCONT` and terminated on cancel. The
+helper processes are suspended with `SIGSTOP`/`SIGCONT` and terminated on cancel. The libarchive
+writer also checks it in its output callback. .xz and Brotli are encoded by the app itself
+(`XzEncoder`, `BrotliEncoder`) on libarchive's plain tar or raw output, so that cancellation works
+inside long encoder flushes (liblzma's multithreaded timeout) and xz memory stays within a budget
+(threads are reduced until the encoder fits in a quarter of physical memory). On failure the libarchive
+handle is marked failed before the temporary file is discarded, so nothing is flushed afterwards. The
 `OperationCenter` queue runs operations on GCD with a quality-of-service and concurrency limit
 derived from the performance mode and the machine (`SystemProfile`: P/E core counts via
 `hw.perflevel*`, Low Power Mode, thermal state).

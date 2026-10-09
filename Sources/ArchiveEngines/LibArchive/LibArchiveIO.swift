@@ -147,21 +147,36 @@ final class LAOutput {
     let fd: Int32
     private(set) var bytes: UInt64 = 0
     var error: ArchiveError?
-    let brotli: BrotliEncoder?
     let progress: OperationProgress?
+    /// Compression applied here rather than by libarchive (whose output is then a plain tar or raw stream).
+    enum Encoder {
+        case brotli(quality: Int)
+        case xz(preset: Int, threads: Int?)
+    }
+    private let process: ((UnsafeRawBufferPointer, Bool, (UnsafeRawBufferPointer) throws -> Void) throws -> Void)?
 
-    init(fd: Int32, brotliQuality: Int?, progress: OperationProgress?) throws {
+    init(fd: Int32, encoder: Encoder?, progress: OperationProgress?) throws {
         self.fd = fd
         self.progress = progress
-        brotli = try brotliQuality.map { try BrotliEncoder(quality: $0) }
+        switch encoder {
+        case .brotli(let quality)?:
+            let b = try BrotliEncoder(quality: quality)
+            process = { try b.process($0, finish: $1, emit: $2) }
+        case .xz(let preset, let threads)?:
+            let x = try XzEncoder(preset: preset, threads: threads) { [weak progress] in try progress?.checkCancelled() }
+            process = { try x.process($0, finish: $1, emit: $2) }
+        case nil:
+            process = nil
+        }
     }
 
     func write(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int {
         guard let ptr, len > 0 else { return 0 }
         do {
+            try progress?.checkCancelled()
             let buf = UnsafeRawBufferPointer(start: ptr, count: len)
-            if let b = brotli {
-                try b.process(buf, finish: false) { try rawWrite($0) }
+            if let process {
+                try process(buf, false) { try rawWrite($0) }
             } else {
                 try rawWrite(buf)
             }
@@ -175,10 +190,10 @@ final class LAOutput {
     }
 
     func finish() throws {
-        if let b = brotli {
-            try b.process(UnsafeRawBufferPointer(start: nil, count: 0), finish: true) { try rawWrite($0) }
-        }
         if let error { throw error }
+        if let process {
+            try process(UnsafeRawBufferPointer(start: nil, count: 0), true) { try rawWrite($0) }
+        }
     }
 
     private func rawWrite(_ buf: UnsafeRawBufferPointer) throws {

@@ -38,13 +38,21 @@ final class StressTests: XCTestCase {
         _ = randomFile("src/b.bin", bytes: 64 << 20)
         let out = work.appendingPathComponent("out")
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
-        for format in [FormatID.zip, .tarXz] {
-            let p = OperationProgress()
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { p.cancel() }
-            XCTAssertThrowsError(try service.compress(CompressRequest(items: [src], destinationDirectory: out, settings: CompressionSettings(format: format, level: 9)), progress: p)) {
-                XCTAssertEqual($0 as? ArchiveError, .cancelled, "\(format): \($0)")
+        // tar.xz at level 9 uses one 192 MB block: without a cancellable encoder, all of the work
+        // would happen inside archive_write_close and a cancel would wait for it (~100 s here).
+        for format in [FormatID.zip, .tarXz, .tarZstd, .tarBzip2] {
+            for delay in [0.3, 1.5] {
+                let p = OperationProgress()
+                let cancelledAt = LockedBox<Date?>(nil)
+                DispatchQueue.global().asyncAfter(deadline: .now() + delay) { cancelledAt.value = Date(); p.cancel() }
+                XCTAssertThrowsError(try service.compress(CompressRequest(items: [src], destinationDirectory: out, settings: CompressionSettings(format: format, level: 9)), progress: p)) {
+                    XCTAssertEqual($0 as? ArchiveError, .cancelled, "\(format): \($0)")
+                }
+                if let t = cancelledAt.value {
+                    XCTAssertLessThan(Date().timeIntervalSince(t), 5, "\(format) after \(delay) s: cancellation must take effect promptly")
+                }
+                XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: out.path), [], "\(format): no partial or temporary files")
             }
-            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: out.path), [], "\(format): no partial or temporary files")
         }
     }
 
@@ -159,4 +167,14 @@ func residentMemory() -> UInt64 {
     }
     return kr == KERN_SUCCESS ? UInt64(info.resident_size) : 0
     #endif
+}
+
+final class LockedBox<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value: T
+    init(_ value: T) { _value = value }
+    var value: T {
+        get { lock.lock(); defer { lock.unlock() }; return _value }
+        set { lock.lock(); _value = newValue; lock.unlock() }
+    }
 }

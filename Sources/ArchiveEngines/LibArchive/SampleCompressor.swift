@@ -18,7 +18,9 @@ public struct LibArchiveSampleCompressor: SampleCompressor {
             return n
         }
         guard let a = archive_write_new() else { return nil }
-        defer { archive_write_free(a) }
+        let sink = Sink()
+        // archive_write_free may flush through the callback, so the sink must outlive it.
+        defer { withExtendedLifetime(sink) { _ = archive_write_free(a) } }
         archive_write_set_format_raw(a)
         let rc: Int32
         switch method {
@@ -35,7 +37,6 @@ public struct LibArchiveSampleCompressor: SampleCompressor {
         let lvl = filter == "zstd" ? LibArchiveWriter.zstdLevels[min(9, max(0, level))] : max(1, min(9, level))
         _ = archive_write_set_filter_option(a, filter, "compression-level", String(lvl))
         archive_write_set_bytes_in_last_block(a, 1)
-        let sink = Sink()
         let ctx = Unmanaged.passUnretained(sink).toOpaque()
         guard archive_write_open(a, ctx, nil, { _, ctx, _, len in
             Unmanaged<Sink>.fromOpaque(ctx!).takeUnretainedValue().count += len

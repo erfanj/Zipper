@@ -66,7 +66,7 @@ proprietary; it is only used to create test fixtures and RAR archives).
 Everything except the app builds on Linux, which is how this repository was developed and tested:
 
 ```sh
-sudo apt install libarchive-dev libbrotli-dev zlib1g-dev 7zip 7zip-rar unar
+sudo apt install libarchive-dev libbrotli-dev liblzma-dev zlib1g-dev 7zip 7zip-rar unar
 swift build && swift test
 ```
 

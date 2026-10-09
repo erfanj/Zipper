@@ -37,8 +37,12 @@ Honest list of what is not done, not verified, or not possible.
 * **Archive editing rebuilds** the archive (extract → edit → recompress → verify → atomic replace).
   This is safe and works for every writable format, but on very large archives it costs time and
   temporary disk space proportional to the uncompressed size; untouched entries are recompressed.
-* **Pause** is real but coarse: in-process engines pause at their next block boundary; helper
-  processes are suspended with SIGSTOP. Interrupted operations are not resumable after a crash or
+* **Pause and cancel** take effect at the next output write for in-process engines. For .xz, the
+  encoder returns at least every 250 ms, so cancel and pause respond within about that. Other codecs
+  with large internal blocks (bzip2, LZMA in 7z created by libarchive) can take a few seconds.
+  Multithreaded zstd jobs that are already running finish in the background after a cancel; the
+  operation itself returns immediately and its output is already gone. Helper processes are
+  suspended with SIGSTOP. Interrupted operations are not resumable after a crash or
   quit; they restart cleanly (temporary output is removed).
 * **Metadata**: creation dates (birth times) are read from archives but not restored on extraction;
   ACLs are stored only in Mac Preservation mode and restored only by formats/engines that support

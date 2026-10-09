@@ -30,7 +30,21 @@ final class LibArchiveWriter {
         let format = request.format
         let container = FormatCatalog.descriptor(for: format)?.effectiveContainer ?? format
         guard let a = archive_write_new() else { throw ArchiveError.internalError("libarchive allocation failed") }
-        defer { archive_write_free(a) }
+        // archive_write_free closes the archive if it is still open, which can call the write
+        // callback. The callback's unretained context must stay alive until then.
+        var callbackContext: LAOutput?
+        var failed = false
+        defer {
+            let context = callbackContext
+            if failed {
+                // After archive_write_fail nothing is written any more, but freeing still waits for
+                // in-flight multithreaded encoder jobs (zstd at high levels: seconds). Let the
+                // cancellation or error return now and release the encoder in the background.
+                DispatchQueue.global(qos: .utility).async { withExtendedLifetime(context) { _ = archive_write_free(a) } }
+            } else {
+                withExtendedLifetime(context) { _ = archive_write_free(a) }
+            }
+        }
 
         func check(_ rc: Int32, _ what: String) throws {
             if rc == LA.warn { warnings.append("\(what): \(LA.errorString(a))") }
@@ -41,7 +55,7 @@ final class LibArchiveWriter {
             if rc != LA.ok { throw ArchiveError.invalidArgument("Option \(module):\(key)=\(value) was rejected: \(LA.errorString(a))") }
         }
         let level = settings.clampedLevel
-        var brotliQuality: Int?
+        var encoder: LAOutput.Encoder?
         var isRaw = false
         var isZipFamily = false
 
@@ -134,9 +148,8 @@ final class LibArchiveWriter {
                 try check(archive_write_add_filter_bzip2(a), "bzip2")
                 try option("bzip2", "compression-level", String(max(1, level)))
             case .xz:
-                try check(archive_write_add_filter_xz(a), "xz")
-                try option("xz", "compression-level", String(level))
-                if engine.xzThreads { _ = archive_write_set_option(a, "xz", "threads", threads) }
+                // Encoded by XzEncoder (cancellable, memory-capped) instead of libarchive's filter.
+                encoder = .xz(preset: level, threads: settings.threads)
             case .lzma:
                 try check(archive_write_add_filter_lzma(a), "lzma")
                 try option("lzma", "compression-level", String(level))
@@ -154,7 +167,7 @@ final class LibArchiveWriter {
                 try check(archive_write_add_filter_compress(a), "compress")
             case .brotli:
                 guard engine.brotliAvailable else { throw ArchiveError.noEngineAvailable(format: format, operation: "create", hint: nil) }
-                brotliQuality = min(11, level + 2)
+                encoder = .brotli(quality: min(11, level + 2))
             default:
                 throw ArchiveError.operationNotSupported(format: format, operation: "creation", reason: "Unknown compression layer.")
             }
@@ -175,7 +188,8 @@ final class LibArchiveWriter {
         // Output (temporary file, moved into place on success).
         let out = try AtomicOutputFile(request.output)
         let output: LAOutput
-        do { output = try LAOutput(fd: out.fd, brotliQuality: brotliQuality, progress: progress) } catch { out.discard(); throw error }
+        do { output = try LAOutput(fd: out.fd, encoder: encoder, progress: progress) } catch { out.discard(); throw error }
+        callbackContext = output
         let ctx = Unmanaged.passUnretained(output).toOpaque()
         // No padding of the final block: tape-style 10 KB blocking only wastes space on disk.
         archive_write_set_bytes_in_last_block(a, 1)
@@ -184,6 +198,8 @@ final class LibArchiveWriter {
             return Unmanaged<LAOutput>.fromOpaque(ctx).takeUnretainedValue().write(buf, len)
         }, nil)
         guard openRC == LA.ok else {
+            archive_write_fail(a)
+            failed = true
             out.discard()
             throw ArchiveError.io(path: request.output.path, code: archive_errno(a), message: LA.errorString(a))
         }
@@ -207,8 +223,13 @@ final class LibArchiveWriter {
             try progress.checkCancelled()
             try out.commit()
         } catch {
+            // Mark the handle failed so archive_write_free doesn't flush into the discarded file.
+            archive_write_fail(a)
+            failed = true
             out.discard()
-            throw error
+            // A failing write callback (cancellation, disk full) reaches libarchive's caller as a
+            // generic error; report the actual cause.
+            throw output.error ?? error
         }
         progress.flush()
         return CreateResult(outputs: [request.output], inputBytes: total, outputBytes: output.bytes, entryCount: entryCount,

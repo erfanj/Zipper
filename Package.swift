@@ -3,7 +3,7 @@
 // Universal Archiver — Swift package manifest.
 //
 // Targets:
-//   CArchive / CZlib / CBrotli  — system-library shims for the C engines.
+//   CArchive / CZlib / CBrotli / CLzma — system-library shims for the C engines.
 //   ArchiveCore                 — engine-agnostic model, format registry, detection, safety.
 //   ArchiveEngines              — concrete engine providers (libarchive, 7-Zip, Brotli, unar, RAR, Apple Archive).
 //   ArchiverKit                 — high-level services (compress, extract, convert, test, repair, split, compare…).
@@ -45,6 +45,12 @@ let package = Package(
             pkgConfig: "libbrotlienc",
             providers: [.brew(["brotli"]), .apt(["libbrotli-dev"])]
         ),
+        .systemLibrary(
+            name: "CLzma",
+            path: "Sources/CLzma",
+            pkgConfig: "liblzma",
+            providers: [.brew(["xz"]), .apt(["liblzma-dev"])]
+        ),
         .target(
             name: "ArchiveCore",
             dependencies: [
@@ -54,7 +60,7 @@ let package = Package(
         ),
         .target(
             name: "ArchiveEngines",
-            dependencies: ["ArchiveCore", "CArchive", "CBrotli", "CZlib"]
+            dependencies: ["ArchiveCore", "CArchive", "CBrotli", "CLzma", "CZlib"]
         ),
         .target(
             name: "ArchiverKit",

@@ -8,7 +8,7 @@ Linux test environment used the distribution packages noted in the last column.
 | Component | Version (shipped / tested) | Licence | How it is used | Source | Architectures |
 |---|---|---|---|---|---|
 | libarchive | 3.8.9 / 3.7.2 (Ubuntu 24.04) | BSD-2-Clause | Linked statically, in-process | github.com/libarchive/libarchive (SHA-256 pinned) | arm64, x86_64 |
-| XZ Utils (liblzma) | 5.8.4 / 5.4.5 | 0BSD | Static, via libarchive | github.com/tukaani-project/xz (pinned) | arm64, x86_64 |
+| XZ Utils (liblzma) | 5.8.4 / 5.4.5 | 0BSD | Static; via libarchive and directly (multithreaded .xz encoder) | github.com/tukaani-project/xz (pinned) | arm64, x86_64 |
 | Zstandard | 1.5.7 / 1.5.5 | BSD-3-Clause (dual GPLv2) | Static, via libarchive | github.com/facebook/zstd (pinned) | arm64, x86_64 |
 | LZ4 | 1.10.0 / 1.9.4 | BSD-2-Clause (library) | Static, via libarchive | github.com/lz4/lz4 (pinned) | arm64, x86_64 |
 | Brotli | 1.2.0 / 1.1.0 | MIT | Static; own Swift integration (`BrotliCodec`) | PyPI source distribution of the official package (pinned) | arm64, x86_64 |
