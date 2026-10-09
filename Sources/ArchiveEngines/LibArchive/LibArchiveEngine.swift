@@ -306,7 +306,8 @@ public final class LibArchiveEngine: ArchiveEngine, @unchecked Sendable {
     // MARK: Helpers
 
     func isRaw(_ s: ArchiveSource) -> Bool {
-        FormatCatalog.descriptor(for: s.format)?.kind == .compressionStream
+        let kind = FormatCatalog.descriptor(for: s.format)?.kind
+        return kind == .compressionStream || kind == .encoding
     }
 
     func usesBrotli(_ s: ArchiveSource) -> Bool {
@@ -319,6 +320,15 @@ public final class LibArchiveEngine: ArchiveEngine, @unchecked Sendable {
 
     /// Name for the single payload of a compression stream: the archive name minus its extension.
     func rawEntryName(_ s: ArchiveSource) -> String {
+        // uuencode / xxencode record the original name in their "begin MODE NAME" line.
+        if FormatCatalog.descriptor(for: s.format)?.kind == .encoding, let fh = FileHandle(forReadingAtPath: s.url.path) {
+            let head = String(decoding: fh.readData(ofLength: 4096), as: UTF8.self)
+            try? fh.close()
+            for line in head.split(whereSeparator: \.isNewline) where line.hasPrefix("begin ") {
+                let parts = line.split(separator: " ", maxSplits: 2)
+                if parts.count == 3 { return String(parts[2]).trimmingCharacters(in: .whitespaces) }
+            }
+        }
         let name = s.url.lastPathComponent
         if let m = FormatCatalog.matchExtension(of: name), name.count > m.ext.count + 1 {
             let stripped = String(name.dropLast(m.ext.count + 1))

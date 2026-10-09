@@ -298,7 +298,7 @@ func cmdCompress(_ args: Args) throws -> Exit {
                               excluded: outcome.excluded.map { ["path": $0.path, "reason": $0.reason] }, warnings: outcome.warnings))
     } else if !quiet {
         for a in outcome.archives {
-            let savings = a.savings.map { $0 >= 0 ? String(format: " (%.1f%% smaller)", $0 * 100) : String(format: " (%.1f%% larger — the content was already compressed or very small)", -$0 * 100) } ?? ""
+            let savings = a.savings.map { $0 > -0.0005 ? String(format: " (%.1f%% smaller)", $0 * 100) : String(format: " (%.1f%% larger — the content was already compressed or very small)", -$0 * 100) } ?? ""
             print("Created \(a.outputs.map(\.lastPathComponent).joined(separator: ", ")) — \(ByteFormatting.string(a.inputBytes)) → \(ByteFormatting.string(a.outputBytes))\(savings) [\(a.engine)]")
             if let v = a.verification { print("  Verification: \(v.result.rawValue)") }
             a.warnings.forEach { print("  Warning: \($0)") }

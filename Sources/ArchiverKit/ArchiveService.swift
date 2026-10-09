@@ -60,6 +60,16 @@ public final class ArchiveService: @unchecked Sendable {
         }
     }
 
+    /// "Damaged" verdicts can come from an engine's incomplete support of a format variant (for
+    /// example libarchive and encrypted RAR 5), so an independent engine is asked before concluding
+    /// the archive is damaged. Checksum mismatches are not retried: they mean the data is wrong.
+    static func isPossiblyEngineSpecific(_ e: ArchiveError) -> Bool {
+        switch e {
+        case .damaged, .truncated, .externalTool: return true
+        default: return false
+        }
+    }
+
     /// Runs `body` with each capable engine until one succeeds or a non-capability error occurs.
     func withEngines<T>(for format: FormatID, _ req: EngineRequirements, notes: inout [String],
                         _ body: (ArchiveEngine) throws -> T) throws -> (T, EngineID) {
@@ -74,14 +84,24 @@ public final class ArchiveService: @unchecked Sendable {
             }
             throw ArchiveError.noEngineAvailable(format: format, operation: req.operations.names.first ?? "open", hint: hint)
         }
-        var lastError: ArchiveError?
+        var firstError: ArchiveError?
         for (i, engine) in candidates.enumerated() {
             do {
-                return (try body(engine), engine.id)
+                let result = try body(engine)
+                if let first = firstError, case .damaged = first {
+                    notes.append("\(candidates[0].descriptor.name) reported the archive as damaged (\(first.explanation)); \(engine.descriptor.name) read it without errors.")
+                }
+                return (result, engine.id)
             } catch {
                 let e = ArchiveError.wrap(error)
-                lastError = e
-                guard Self.isCapabilityError(e), i + 1 < candidates.count else { throw e }
+                if firstError == nil { firstError = e }
+                // Engine-specific failures may be retried with an independent implementation. If every
+                // engine fails, the first (preferred engine's) error is reported.
+                let retryable = Self.isCapabilityError(e) || Self.isPossiblyEngineSpecific(e)
+                guard retryable, i + 1 < candidates.count else {
+                    if let f = firstError, Self.isCapabilityError(e) || Self.isPossiblyEngineSpecific(e), !Self.isCapabilityError(f) { throw f }
+                    throw e
+                }
                 let next = candidates[i + 1]
                 switch fallbackPolicy {
                 case .never: throw e
@@ -91,7 +111,7 @@ public final class ArchiveService: @unchecked Sendable {
                 notes.append("\(engine.descriptor.name) could not handle this archive (\(e.title.lowercased())); used \(next.descriptor.name) instead.")
             }
         }
-        throw lastError ?? ArchiveError.internalError("no engine ran")
+        throw firstError ?? ArchiveError.internalError("no engine ran")
     }
 
     // MARK: Open / list
@@ -123,14 +143,22 @@ public final class ArchiveService: @unchecked Sendable {
         }
         let source = detection.source(for: url)
         progress.setPhase("Testing")
-        let (report, _) = try withEngines(for: detection.format, EngineRequirements(operations: .test), notes: &notes) { engine -> IntegrityReport in
-            let r = try engine.test(source, options: options, progress: progress)
-            // A capability failure reported inside the report (rather than thrown) should still fall back.
-            if let first = r.issues.first, ["unsupported-method", "unsupported-encryption"].contains(first.code) {
-                throw first.code == "unsupported-method" ? ArchiveError.unsupportedMethod(method: first.message, entry: first.entry)
-                    : ArchiveError.unsupportedEncryption(method: first.message)
+        var failedReports: [IntegrityReport] = []
+        let report: IntegrityReport
+        do {
+            (report, _) = try withEngines(for: detection.format, EngineRequirements(operations: .test), notes: &notes) { engine -> IntegrityReport in
+                let r = try engine.test(source, options: options, progress: progress)
+                // A failure that may be specific to this engine is re-checked with an independent one.
+                if let first = r.issues.first, ["unsupported-method", "unsupported-encryption", "damaged", "truncated", "external-tool"].contains(first.code) {
+                    failedReports.append(r)
+                    throw first.code == "unsupported-method" ? ArchiveError.unsupportedMethod(method: first.message, entry: first.entry)
+                        : first.code == "unsupported-encryption" ? ArchiveError.unsupportedEncryption(method: first.message)
+                        : ArchiveError.damaged(details: first.message)
+                }
+                return r
             }
-            return r
+        } catch let e as ArchiveError where !failedReports.isEmpty && (Self.isCapabilityError(e) || Self.isPossiblyEngineSpecific(e)) {
+            report = failedReports[0]
         }
         var final = report
         let container = FormatCatalog.descriptor(for: detection.format)?.effectiveContainer ?? detection.format

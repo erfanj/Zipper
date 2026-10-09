@@ -72,6 +72,9 @@ enum LibArchiveErrorMapper {
         if m.contains("encrypt") && (m.contains("not supported") || m.contains("unsupported") || m.contains("unavailable")) {
             return .unsupportedEncryption(method: message)
         }
+        if m.contains("support unavailable") || m.contains("not yet supported") || m.contains("unsupported block") {
+            return .unsupportedMethod(method: message, entry: entry)
+        }
         if m.contains("hmac") || m.contains("authentication") {
             return .authenticationFailed(entry: entry)
         }

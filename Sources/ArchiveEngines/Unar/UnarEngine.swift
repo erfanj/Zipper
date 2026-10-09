@@ -64,7 +64,7 @@ public final class UnarEngine: ArchiveEngine, @unchecked Sendable {
 
     public func list(_ source: ArchiveSource, options: ReadOptions, progress: OperationProgress) throws -> ArchiveListing {
         let (lsar, _) = try tools()
-        var args = ["-j", "-jss"]
+        var args = ["-j"]
         if let enc = options.filenameEncoding { args += ["-e", enc] }
         args += ["--", source.url.path]
         let r = try HelperProcess(lsar, args).run()

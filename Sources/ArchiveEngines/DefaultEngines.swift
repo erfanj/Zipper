@@ -14,6 +14,7 @@ public enum DefaultEngines {
         #endif
         engines.append(UnarEngine())
         engines.append(RarEngine())
+        engines.append(ExternalToolsEngine())
         #if os(macOS)
         engines.append(DiskImageEngine())
         #endif
