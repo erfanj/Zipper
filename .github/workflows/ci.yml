@@ -105,7 +105,7 @@ jobs:
           name: Zipper-debug-app
           path: Zipper-debug.zip
           retention-days: 7
-      - name: Build and test the package (macOS engines, Keychain, Apple Archive)
+      - name: Build and test the package on macOS (bundled libarchive and 7-Zip)
         timeout-minutes: 25
         # The bundled 7-Zip (Vendor/macos/helpers/7zz) is the engine and the reference tool; the
         # runner's own 7z is p7zip 17.05, older than the 21.00 Zipper requires.

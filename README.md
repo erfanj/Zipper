@@ -8,11 +8,11 @@ SwiftUI on top of a pluggable engine layer:
 * 7-Zip, The Unarchiver's tools, RAR, Apple Archive and `hdiutil` as helper engines.
 
 > **Status.** The core, engines, services, the `zipper` command-line tool and the app's model layer
-> are built and tested on every push (Linux CI). The macOS app's SwiftUI views, the Quick Look
-> extension, Finder Quick Actions and Shortcuts are written and reviewed but have not been compiled
-> on a Mac yet. The macOS CI job and your first Xcode build are their first compile. Nothing is
-> signed or notarized until you do it with your Developer ID. See
-> [KnownLimitations.md](Documentation/KnownLimitations.md).
+> are built and tested on every push (Linux CI). The macOS CI job builds the app with Xcode
+> (Quick Look extension, Finder Quick Actions and Shortcuts included), checks the bundle, and runs
+> the full test suite on macOS against the bundled libraries and 7-Zip. The UI has no automated UI
+> tests yet, so try the app before you ship it. Nothing is signed or notarized until you do it with
+> your Developer ID. See [KnownLimitations.md](Documentation/KnownLimitations.md).
 
 ## Using Zipper
 

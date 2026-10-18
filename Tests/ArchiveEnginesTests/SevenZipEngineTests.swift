@@ -157,3 +157,46 @@ final class SevenZipEngineTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: work.appendingPathComponent("x/Sample/docs/中文/文件.txt").path))
     }
 }
+
+/// `7zz i` output from both table layouts (rows copied from 7-Zip 23.01 and 26.04). Needs no 7-Zip.
+final class SevenZipFormatTableTests: XCTestCase {
+    func check(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
+        let (readable, creatable) = SevenZipEngine.parseFormats(text)
+        XCTAssertEqual(readable, ["7z", "APFS", "Rar5", "zip"], file: file, line: line)
+        XCTAssertEqual(creatable, ["7z", "zip"], file: file, line: line)
+        let table = SevenZipEngine.buildTable(readable: readable, creatable: creatable)
+        XCTAssertEqual(table[.sevenZip]?.operations.contains(.create), true, file: file, line: line)
+        XCTAssertEqual(table[.zip]?.encryptionMethods.contains(.zipAES256), true, file: file, line: line)
+        XCTAssertNotNil(table[.rar], file: file, line: line)
+    }
+
+    func testVersion23Layout() {
+        check("""
+        7-Zip 23.01 (x64) : Copyright (c) 1999-2023 Igor Pavlov : 2023-06-20
+
+        Formats:
+         0 C...F..........c.a.m+.. w...0  7z       7z            7 z BC AF ' 1C
+         0  ......................  APFS     apfs img      offset=32 N X S B 00
+         0  ...F..................  Rar5     rar r00       R a r ! 1A 07 01 00
+         0 C...FMG........c.a.m+.. wud.0  zip      zip z01 zipx jar xpi odt ods docx xlsx epub ipa apk appx P K 03 04
+
+        Codecs:
+         0  D     40305 Rar5
+        """)
+    }
+
+    func testVersion26Layout() {
+        check("""
+        7-Zip (z) 26.04 (x64) : Copyright (c) 1999-2026 Igor Pavlov : 2026-10-05
+
+        Formats:
+           C...F..........c.a.m+..  7z       7z            7 z BC AF ' 1C
+            ......................  APFS     apfs img      offset=32 N X S B 00
+            ...F..................  Rar5     rar r00       R a r ! 1A 07 01 00
+           C...FMG........c.a.m+..  zip      zip z01 zipx jar xpi odt ods docx xlsx epub ipa apk appx P K 03 04
+
+        Codecs:
+             D     40305 Rar5
+        """)
+    }
+}

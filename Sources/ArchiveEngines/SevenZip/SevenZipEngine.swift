@@ -41,34 +41,49 @@ public final class SevenZipEngine: ArchiveEngine, @unchecked Sendable {
                 version = s.components(separatedBy: " ").last
                 number = Double(version ?? "") ?? 0
             }
-            var inFormats = false
-            for line in text.components(separatedBy: "\n") {
-                if line.hasPrefix("Formats:") { inFormats = true; continue }
-                if line.hasPrefix("Codecs:") { break }
-                guard inFormats else { continue }
-                var tokens = line.split(separator: " ").map(String.init)
-                guard tokens.count >= 3, Int(tokens[0]) != nil else { continue }
-                let flags = tokens[1]
-                tokens.removeFirst(2)
-                // Creatable formats print an extra update-flags token such as "w...0" / "wu.n1".
-                if let t = tokens.first, t.count == 5, t.last?.isNumber == true, t.first == "w" || t.first == "." { tokens.removeFirst() }
-                guard let name = tokens.first else { continue }
-                readable.insert(name)
-                if flags.hasPrefix("C") { creatable.insert(name) }
-            }
+            (readable, creatable) = Self.parseFormats(text)
         }
         versionNumber = number
-        let usable = executable != nil && number >= 21
+        // An unreadable format list would leave the engine "available" with nothing it can do.
+        let usable = executable != nil && number >= 21 && !readable.isEmpty
         descriptor = EngineDescriptor(
             id: .sevenZip, name: "7-Zip", implementation: "Separate helper process (\(executable?.lastPathComponent ?? "7zz"))",
             version: version, minimumVersion: "21.00", license: "LGPL-2.1-or-later (+ unRAR restriction; BSD-3 for some codecs)",
             licensingRestrictions: "The bundled unRAR code may only be used to extract RAR archives, not to create a RAR-compatible compressor.",
             isAvailable: usable,
             unavailableReason: executable == nil ? "7-Zip (7zz) is not installed. Bundle it in Contents/Helpers or install it with Homebrew (brew install sevenzip)."
-                : (number < 21 ? "7-Zip \(version ?? "?") is too old; 21.00 or later is required." : nil),
+                : number < 21 ? "7-Zip \(version ?? "?") is too old; 21.00 or later is required."
+                : readable.isEmpty ? "Zipper couldn't read the list of formats from 7-Zip \(version ?? "")." : nil,
             location: executable?.path,
             isolation: "Separate process with a minimal environment. Writes only into a private staging folder; results are validated and imported by the safe sink. Free-space watchdog stops runaway output.")
         if usable { table = Self.buildTable(readable: readable, creatable: creatable) }
+    }
+
+    /// Reads the "Formats:" table of `7zz i`. The layout changed in 7-Zip 26: earlier versions start
+    /// each row with a library index and give creatable formats an update-flags column, e.g.
+    ///
+    ///     0 C...F..........c.a.m+.. w...0  7z       7z      (23.01)
+    ///       C...F..........c.a.m+..  7z       7z            (26.04)
+    ///
+    /// Both are accepted: missing every row would leave the engine "available" but with no formats.
+    static func parseFormats(_ text: String) -> (readable: Set<String>, creatable: Set<String>) {
+        var readable = Set<String>(), creatable = Set<String>()
+        var inFormats = false
+        for line in text.components(separatedBy: "\n") {
+            if line.hasPrefix("Formats:") { inFormats = true; continue }
+            if line.hasPrefix("Codecs:") { break }
+            guard inFormats else { continue }
+            var tokens = line.split(separator: " ").map(String.init)
+            if let first = tokens.first, Int(first) != nil { tokens.removeFirst() }
+            // The flags column: letters and dots, such as "C...F..........c.a.m+.." or "......".
+            guard tokens.count >= 2, tokens[0].count >= 10, tokens[0].allSatisfy({ $0.isLetter || $0 == "." || $0 == "+" }) else { continue }
+            let flags = tokens.removeFirst()
+            if let t = tokens.first, t.count == 5, t.last?.isNumber == true, t.first == "w" || t.first == "." { tokens.removeFirst() }
+            guard let name = tokens.first else { continue }
+            readable.insert(name)
+            if flags.hasPrefix("C") { creatable.insert(name) }
+        }
+        return (readable, creatable)
     }
 
     public var supportedFormats: [FormatID] { Array(table.keys).sorted() }

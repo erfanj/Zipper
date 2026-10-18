@@ -74,6 +74,13 @@
   without its lock.
 * **Error messages:** a file whose name suggested an archive but whose content didn't match showed
   a helper tool's raw JSON. It now reads "not an archive Zipper recognises".
+* **7-Zip 26 was silently unusable.** 7-Zip 26 (the version the app bundles) dropped the index
+  and update-flags columns from its `7zz i` format table. Zipper's parser skipped every row, so the
+  engine reported itself available while supporting no formats. That disabled encrypted 7z,
+  encrypted and solid RAR, split archives, Deflate64 and disk images, without any error. Both
+  layouts now parse (with tests built from real 23.01 and 26.04 output), and an empty format list
+  marks the engine unavailable with a reason, so this can't fail silently again. Linux CI used
+  7-Zip 23.01 and couldn't see it; the first macOS test run did.
 * **Recovering damaged archives on the Mac:** with libarchive 3.8 (the version the app bundles), a
   corrupt Deflate stream puts the whole reader into a fatal state, so salvage stopped at the first
   damaged file and recovered nothing after it. Salvage now reopens the archive and continues after

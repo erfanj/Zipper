@@ -2,19 +2,18 @@
 
 Honest list of what is not done, not verified, or not possible.
 
-## Not yet verified on a Mac
+## Not yet verified
 
-* **The app's SwiftUI/AppKit views, the Quick Look extension, Finder Quick Actions, Shortcuts,
-  Keychain storage, Dock progress, notifications, and the Apple Archive/AEA and hdiutil engines have
-  not been compiled on macOS yet.** This repository is developed in a Linux container, so what is
-  checked differs by layer:
-  * The core, engines, services and CLI are built and tested on Linux.
-  * The app's model layer (`Sources/ZipperMac/Model`: settings, the app model, the archive browser's
-    index, the compress/extract forms, the tools) is compiled and type-checked on Linux too.
-  * The views were reviewed by hand against the macOS 14 SDK.
+* **The app builds on macOS, but its UI hasn't been exercised by automated tests.** The macOS CI
+  job (`.github/workflows/ci.yml`, Xcode 16.4 on macOS 15) builds the app, the Quick Look extension
+  and the embedded `zipper` tool, verifies the signature and bundle layout, and runs the whole test
+  suite on macOS against the bundled libarchive 3.8.9 and 7-Zip. Not covered by any automated test:
+  * the views' behaviour (keyboard navigation, VoiceOver, drag and drop, light and dark mode);
+  * Finder Quick Actions, Shortcuts, Dock progress and notifications at run time;
+  * the Quick Look preview inside Finder;
+  * the Apple Archive/AEA and `hdiutil` engines and Keychain storage, which have no tests yet.
 
-  The macOS CI job (`.github/workflows/ci.yml`) builds the app with Xcode and is the first real
-  check. Expect a few compile fixes the first time it runs.
+  Try these by hand before a release (see the checklist in [Distribution.md](Distribution.md)).
 * **No Apple Silicon measurements.** Benchmarks were run on x86_64 Linux. The Apple-Silicon-specific
   logic (P/E core detection via `hw.perflevel*`, QoS mapping, Low Power Mode and thermal handling)
   is implemented but unmeasured.
