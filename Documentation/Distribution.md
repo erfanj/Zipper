@@ -180,6 +180,49 @@ encrypted 7z, Quick Look and a Finder Quick Action.
 | Quick Look preview not used | Run `qlmanage -r`. Make sure only one copy of Zipper is installed (`mdfind kMDItemCFBundleIdentifier = com.yourname.zipper`) |
 | Quick Actions missing | Run `/System/Library/CoreServices/pbs -update`. Check System Settings › Keyboard › Keyboard Shortcuts › Services |
 
+## One command: `Scripts/release.sh`
+
+Steps 2 and 5–8 in one go, on your Mac:
+
+```sh
+Scripts/release.sh --sign "Developer ID Application: Your Name (TEAMID)" --team TEAMID --notarize
+Scripts/smoke-test-app.sh dist/Zipper.app     # launches it, opens an archive, round-trips an encrypted 7z
+```
+
+`release.sh` builds universal libraries if needed, archives, exports, notarizes and staples the
+app, builds and notarizes the DMG, mounts it, checks every signature and architecture, and writes
+`dist/Zipper-<version>.dmg` plus its `.sha256`. Without `--sign` it makes an ad-hoc-signed DMG for
+testing.
+
+## Release builds on GitHub Actions
+
+`.github/workflows/release.yml` does the same on a GitHub-hosted Mac. It runs:
+
+* when you push a version tag (`git tag v1.0.0 && git push --tags`);
+* when you start it from **Actions › Release › Run workflow** (once the workflow is on the default
+  branch);
+* for any pushed commit whose message contains `[release]`.
+
+The DMG, its SHA-256 and screenshots of the running app are attached to the run, under
+**Artifacts**. For a version tag with a notarized build, it also drafts a GitHub release with the
+DMG attached, which you review and publish.
+
+Without the secrets below it builds an ad-hoc-signed DMG, which is fine for testing on your own Mac.
+To sign and notarize, add these in **Settings › Secrets and variables › Actions › New repository
+secret**:
+
+| Secret | What to put in it |
+|---|---|
+| `MACOS_CERTIFICATE_P12` | Your *Developer ID Application* certificate and its private key, base64-encoded. In Keychain Access, find the certificate under **My Certificates**, choose **File › Export Items…**, save it as `.p12` with a password, then run `base64 -i Certificates.p12 \| pbcopy` and paste. |
+| `MACOS_CERTIFICATE_PASSWORD` | The password you chose for the `.p12`. |
+| `APPLE_TEAM_ID` | Your Team ID (developer.apple.com › Account › Membership details). |
+| `NOTARY_KEY_P8` | An App Store Connect API key for notarization. In App Store Connect, go to **Users and Access › Integrations › App Store Connect API**, generate a team key with the *Developer* role, download `AuthKey_XXXXXXXXXX.p8`, and paste its whole contents. Apple lets you download it only once. |
+| `NOTARY_KEY_ID` | That key's Key ID (the `XXXXXXXXXX`). |
+| `NOTARY_ISSUER_ID` | The Issuer ID shown above the keys list. Leave it unset if you use an individual key. |
+
+The workflow imports the certificate into a temporary keychain that it deletes at the end, and only
+the job that drafts the release can write to the repository.
+
 ## Building without Xcode's project
 
 `Scripts/build-app.sh [--universal] [--sign "Developer ID Application: …"]` builds `dist/Zipper.app`

@@ -25,7 +25,12 @@ STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 ditto "$APP" "$STAGE/Zipper.app"
 ln -s /Applications "$STAGE/Applications"
-rm -f "$DMG"
-hdiutil create -volname "Zipper $VERSION" -srcfolder "$STAGE" -fs APFS -format ULFO "$DMG"
+# hdiutil occasionally fails with "Resource busy" right after the files are copied; retry.
+for attempt in 1 2 3; do
+  rm -f "$DMG"
+  hdiutil create -volname "Zipper $VERSION" -srcfolder "$STAGE" -fs APFS -format ULFO "$DMG" && break
+  [[ $attempt == 3 ]] && { echo "hdiutil create failed" >&2; exit 1; }
+  sleep 5
+done
 if [[ -n "$SIGN_ID" ]]; then codesign --force --timestamp --sign "$SIGN_ID" "$DMG"; fi
 echo "Created $DMG"

@@ -51,7 +51,8 @@ rm -rf "$B"; mkdir -p "$B"
 
 # xz (liblzma)
 tar -xJf "$SRC/xz-5.8.4.tar.xz" -C "$B"
-(cd "$B/xz-5.8.4" && ./configure --prefix="$PREFIX" --disable-shared --enable-static --disable-xz --disable-xzdec --disable-lzmadec --disable-lzmainfo --disable-scripts --disable-doc --disable-nls >/dev/null && make -j"$JOBS" >/dev/null && make install >/dev/null)
+# --disable-dependency-tracking: automake's dependency tracking can't compile for two -arch at once.
+(cd "$B/xz-5.8.4" && ./configure --prefix="$PREFIX" --disable-dependency-tracking --disable-shared --enable-static --disable-xz --disable-xzdec --disable-lzmadec --disable-lzmainfo --disable-scripts --disable-doc --disable-nls >/dev/null && make -j"$JOBS" >/dev/null && make install >/dev/null)
 
 # zstd
 tar -xzf "$SRC/zstd-1.5.7.tar.gz" -C "$B"
@@ -86,7 +87,7 @@ tar -xJf "$SRC/libarchive-3.8.9.tar.xz" -C "$B"
 (
   cd "$B/libarchive-3.8.9"
   # libxml2 (for XAR) comes from the SDK; macOS has no pkg-config, so its flags are given explicitly.
-  ./configure --prefix="$PREFIX" --disable-shared --enable-static --without-openssl --without-nettle --without-mbedtls \
+  ./configure --prefix="$PREFIX" --disable-dependency-tracking --disable-shared --enable-static --without-openssl --without-nettle --without-mbedtls \
     --without-lzo2 --without-cng --with-lzma --with-zstd --with-lz4 --with-bz2lib --with-zlib --with-iconv --with-xml2 \
     --disable-bsdtar --disable-bsdcpio --disable-bsdcat --disable-bsdunzip --disable-acl \
     LIBXML2_PC_CFLAGS="-I$(xcrun --show-sdk-path)/usr/include/libxml2" LIBXML2_PC_LIBS="-lxml2" \
@@ -150,5 +151,13 @@ MAP
 libtool -static -o "$B/libCBrotli.a" "$PREFIX/lib/libbrotlienc.a" "$PREFIX/lib/libbrotlidec.a" "$PREFIX/lib/libbrotlicommon.a"
 xcodebuild -create-xcframework -library "$B/libCBrotli.a" -headers "$H/CBrotli" -output "$XCF/CBrotli.xcframework" >/dev/null
 
-echo "Dependencies installed in $PREFIX"
+# Every library must contain every requested architecture (a universal app links all of them).
+for lib in "$B/libCArchive.a" "$PREFIX/lib/liblzma.a" "$B/libCBrotli.a"; do
+  for a in $ARCHS; do
+    lipo "$lib" -verify_arch "$a" || { echo "$(basename "$lib") is missing $a (has: $(lipo -archs "$lib"))" >&2; exit 1; }
+  done
+done
+for a in $ARCHS; do lipo "$PREFIX/helpers/7zz" -verify_arch "$a" || { echo "7zz is missing $a" >&2; exit 1; }; done
+
+echo "Dependencies installed in $PREFIX ($ARCHS)"
 echo "Package.swift now uses $XCF automatically: run 'swift build' or 'xcodegen generate' and build in Xcode."

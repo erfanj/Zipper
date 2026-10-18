@@ -66,7 +66,9 @@ brew install xcodegen && xcodegen generate
 open Zipper.xcodeproj            # scheme "Zipper", ⌘R
 ```
 
-The complete, step-by-step path to a signed, notarized DMG is in
+`Scripts/release.sh` builds the universal release DMG in one command (it signs and notarizes when
+you pass your Developer ID), and `.github/workflows/release.yml` does the same on a GitHub-hosted
+Mac. The complete, step-by-step path to a signed, notarized DMG is in
 **[Documentation/Distribution.md](Documentation/Distribution.md)**:
 
 * the Developer ID certificate and notary credentials;
