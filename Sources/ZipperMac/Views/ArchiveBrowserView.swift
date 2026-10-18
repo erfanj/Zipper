@@ -170,7 +170,7 @@ struct ArchiveBrowserView: View {
                     }
                 }
             }
-            .width(min: 180, ideal: 320)
+            .width(min: 160, ideal: 240)
             TableColumn("Size", value: \.size) { r in
                 Text(r.isFolder ? "--" : ByteFormatting.string(r.size)).monospacedDigit().foregroundStyle(r.isFolder ? .secondary : .primary)
             }
@@ -179,12 +179,12 @@ struct ArchiveBrowserView: View {
                 Text(r.isFolder || r.packed == 0 ? "--" : ByteFormatting.string(r.packed)).monospacedDigit().foregroundStyle(.secondary)
             }
             .width(min: 60, ideal: 90)
-            TableColumn("Kind", value: \.kind) { r in Text(r.kind).foregroundStyle(.secondary) }
-                .width(min: 60, ideal: 120)
+            TableColumn("Kind", value: \.kind) { r in Text(r.kind).lineLimit(1).foregroundStyle(.secondary) }
+                .width(min: 60, ideal: 90)
             TableColumn("Date Modified", value: \.modified) { r in
                 Text(r.modified == .distantPast ? "--" : r.modified.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(.secondary)
             }
-            .width(min: 100, ideal: 150)
+            .width(min: 100, ideal: 175)
         } rows: {
             ForEach(rows) { r in
                 TableRow(r).draggable(DraggedEntry(archive: state.url, path: r.path, isFolder: r.isFolder,

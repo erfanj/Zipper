@@ -88,15 +88,18 @@ struct MainWindow: View {
                 .help("Look inside an archive without extracting it (⌘O)")
             }
         }
-        ToolbarItem(placement: .primaryAction) {
-            Menu {
-                ForEach(Tool.allCases) { tool in
-                    Button { model.showTool(tool) } label: { Label(tool.title, systemImage: tool.symbol) }
+        // On Home only: with an archive open, its own commands lead (Tools stay in the menu bar).
+        if model.currentArchive == nil {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    ForEach(Tool.allCases) { tool in
+                        Button { model.showTool(tool) } label: { Label(tool.title, systemImage: tool.symbol) }
+                    }
+                } label: {
+                    Label("Tools", systemImage: "wrench.and.screwdriver")
                 }
-            } label: {
-                Label("Tools", systemImage: "wrench.and.screwdriver")
+                .help("Test, repair, convert, checksums and more")
             }
-            .help("Test, repair, convert, checksums and more")
         }
         ToolbarItem(placement: .primaryAction) {
             ActivityToolbarButton()
