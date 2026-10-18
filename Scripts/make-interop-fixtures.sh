@@ -8,7 +8,7 @@
 # Each fixture is listed in manifest.json with the payload it must contain. Tools that are not
 # installed are skipped and recorded as such; the interop tests only claim what was generated.
 # Test passwords below are throwaway values for fixtures; passing them as arguments to reference
-# tools here is acceptable, Universal Archiver itself never does.
+# tools here is acceptable, Zipper itself never does.
 set -uo pipefail
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
 OUT="${1:-$(cd "$(dirname "$0")/.." && pwd)/Fixtures/Interop}"

@@ -1,97 +1,152 @@
-# XcodeGen spec: `brew install xcodegen && xcodegen generate` creates UniversalArchiver.xcodeproj.
-# The Xcode project is needed for the Quick Look extension and Shortcuts (App Intents metadata);
-# the main app and CLI can also be built with Scripts/build-app.sh using SwiftPM alone.
+# XcodeGen spec for the Zipper app.
 #
-# Before generating: run Scripts/build-deps-macos.sh (static libarchive/xz/zstd/lz4/brotli + 7zz),
-# or install Homebrew's libarchive and brotli and set PKG_CONFIG_PATH accordingly.
-name: UniversalArchiver
+#   Scripts/build-deps-macos.sh      # once: pinned static libraries + 7-Zip helper (Vendor/macos)
+#   brew install xcodegen
+#   xcodegen generate                # creates Zipper.xcodeproj (git-ignored; regenerate after changes)
+#   open Zipper.xcodeproj
+#
+# The project builds three targets from this repository:
+#   Zipper           — the app (Sources/ZipperMac) linking the package's ArchiverKit/ArchiveEngines/ArchiveCore
+#   ZipperQuickLook  — the Quick Look preview extension, embedded in the app
+#   ZipperCLI        — the `zipper` command-line tool, embedded in Zipper.app/Contents/Helpers
+#
+# Info.plist and entitlements files are referenced through build settings on purpose: XcodeGen's
+# `info:` and `entitlements:` keys would regenerate (overwrite) the hand-written files.
+name: Zipper
 options:
-  bundleIdPrefix: com.example
+  bundleIdPrefix: com.erfanj
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
+  developmentLanguage: en
+  groupSortPosition: top
 settings:
   base:
-    MARKETING_VERSION: 0.1.0
-    CURRENT_PROJECT_VERSION: 1
-    SWIFT_VERSION: "5.10"
-    ENABLE_HARDENED_RUNTIME: YES
-    ARCHS: "$(ARCHS_STANDARD)"            # arm64 + x86_64 for Release when Intel builds are wanted
-    ONLY_ACTIVE_ARCH[config=Debug]: YES
+    # ── Change these two before you ship ────────────────────────────────────────────────
+    ZIPPER_BUNDLE_ID: com.erfanj.zipper          # your reverse-DNS identifier (must be unique)
+    DEVELOPMENT_TEAM: ""                         # your Team ID (developer.apple.com › Membership)
+    # ────────────────────────────────────────────────────────────────────────────────────
+    ZIPPER_COPYRIGHT: "Copyright © 2026. All rights reserved."
+    MARKETING_VERSION: 1.0.0                     # user-visible version (CFBundleShortVersionString)
+    CURRENT_PROJECT_VERSION: 1                   # build number; increase for every upload
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    SWIFT_VERSION: "5.10"                        # Swift 5 language mode (Swift 6 strict concurrency not adopted yet)
+    ENABLE_HARDENED_RUNTIME: YES                 # required for notarization
     DEAD_CODE_STRIPPING: YES
-    CODE_SIGN_STYLE: Automatic
-    DEVELOPMENT_TEAM: ""                   # set your team ID to sign with a Developer ID
+    ENABLE_USER_SCRIPT_SANDBOXING: NO            # the helper-embedding phase copies into the app bundle
+    CODE_SIGN_STYLE: Manual
+  configs:
+    Debug:
+      CODE_SIGN_IDENTITY: "-"                    # "Sign to Run Locally": no certificate needed
+      ONLY_ACTIVE_ARCH: YES
+    Release:
+      CODE_SIGN_IDENTITY: "Developer ID Application"   # direct distribution outside the Mac App Store
+      ONLY_ACTIVE_ARCH: NO
 packages:
-  UniversalArchiverKit:
+  ZipperPackage:
     path: .
 targets:
-  UniversalArchiver:
+  Zipper:
     type: application
     platform: macOS
     sources:
-      - path: Sources/UniversalArchiver
-        excludes: [LinuxStub.swift]
-    info:
-      path: Sources/UniversalArchiver/Info.plist
-    entitlements:
-      path: Sources/UniversalArchiver/UniversalArchiver.entitlements
+      - path: Sources/ZipperMac
+        excludes:
+          - LinuxStub.swift
+          - Info.plist
+          - Zipper.entitlements
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.universalarchiver
-        PRODUCT_NAME: Universal Archiver
+        PRODUCT_NAME: Zipper
+        PRODUCT_BUNDLE_IDENTIFIER: $(ZIPPER_BUNDLE_ID)
+        INFOPLIST_FILE: Sources/ZipperMac/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/ZipperMac/Zipper.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_EMIT_LOC_STRINGS: YES                # Xcode fills Localizable.xcstrings from the UI's strings
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
     dependencies:
-      - package: UniversalArchiverKit
+      - package: ZipperPackage
         product: ArchiverKit
-      - package: UniversalArchiverKit
+      - package: ZipperPackage
         product: ArchiveEngines
-      - package: UniversalArchiverKit
+      - package: ZipperPackage
         product: ArchiveCore
-      - target: UniversalArchiverQuickLook
+      - target: ZipperQuickLook
         embed: true
-      - target: archiver
+      - target: ZipperCLI
         embed: false
     postBuildScripts:
-      - name: Embed helpers (archiver CLI, 7zz)
+      - name: Embed helpers (zipper CLI, 7zz) and licences
+        basedOnDependencyAnalysis: false
+        shell: /bin/bash
         script: |
-          set -e
+          set -euo pipefail
           HELPERS="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers"
-          mkdir -p "$HELPERS"
-          cp "${BUILT_PRODUCTS_DIR}/archiver" "$HELPERS/archiver"
-          if [ -x "${SRCROOT}/Vendor/macos/helpers/7zz" ]; then cp "${SRCROOT}/Vendor/macos/helpers/7zz" "$HELPERS/7zz"; fi
-          for h in "$HELPERS"/*; do codesign --force --options runtime --sign "${EXPANDED_CODE_SIGN_IDENTITY:--}" "$h"; done
-  UniversalArchiverQuickLook:
+          LICENSES="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Licenses"
+          mkdir -p "$HELPERS" "$LICENSES"
+          cp -f "${BUILT_PRODUCTS_DIR}/zipper" "$HELPERS/zipper"
+          if [ -x "${SRCROOT}/Vendor/macos/helpers/7zz" ]; then
+            cp -f "${SRCROOT}/Vendor/macos/helpers/7zz" "$HELPERS/7zz"
+            cp -f "${SRCROOT}/Vendor/macos/helpers/7-Zip-License.txt" "$LICENSES/" 2>/dev/null || true
+          else
+            echo "warning: Vendor/macos/helpers/7zz not found; run Scripts/build-deps-macos.sh to bundle 7-Zip (RAR, encrypted 7z, split archives)."
+          fi
+          cp -f "${SRCROOT}/Documentation/Dependencies.md" "$LICENSES/README.md"
+          # Helpers are signed here (hardened runtime + secure timestamp), before Xcode signs the app.
+          IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:--}"
+          [ -z "$IDENTITY" ] && IDENTITY="-"
+          TIMESTAMP="--timestamp"
+          [ "$IDENTITY" = "-" ] && TIMESTAMP="--timestamp=none"
+          for helper in "$HELPERS"/*; do
+            /usr/bin/codesign --force --options runtime "$TIMESTAMP" --sign "$IDENTITY" "$helper"
+          done
+  ZipperQuickLook:
     type: app-extension
     platform: macOS
-    sources: [Integrations/QuickLook]
-    info:
-      path: Integrations/QuickLook/Info.plist
-    entitlements:
-      path: Integrations/QuickLook/QuickLook.entitlements
+    sources:
+      - path: Integrations/QuickLook
+        excludes:
+          - Info.plist
+          - QuickLook.entitlements
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.universalarchiver.quicklook
+        PRODUCT_NAME: ZipperQuickLook
+        PRODUCT_BUNDLE_IDENTIFIER: $(ZIPPER_BUNDLE_ID).quicklook
+        INFOPLIST_FILE: Integrations/QuickLook/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Integrations/QuickLook/QuickLook.entitlements
+        SKIP_INSTALL: YES
     dependencies:
-      - package: UniversalArchiverKit
+      - package: ZipperPackage
         product: ArchiveEngines
-      - package: UniversalArchiverKit
+      - package: ZipperPackage
         product: ArchiveCore
       - sdk: QuickLookUI.framework
-  archiver:
+  ZipperCLI:
     type: tool
     platform: macOS
-    sources: [Sources/archiver]
+    sources:
+      - path: Sources/ZipperCLI
+    settings:
+      base:
+        PRODUCT_NAME: zipper
+        PRODUCT_MODULE_NAME: ZipperCLI
+        PRODUCT_BUNDLE_IDENTIFIER: $(ZIPPER_BUNDLE_ID).cli
+        SKIP_INSTALL: YES
     dependencies:
-      - package: UniversalArchiverKit
+      - package: ZipperPackage
         product: ArchiverKit
-      - package: UniversalArchiverKit
+      - package: ZipperPackage
         product: ArchiveEngines
-      - package: UniversalArchiverKit
+      - package: ZipperPackage
         product: ArchiveCore
 schemes:
-  UniversalArchiver:
+  Zipper:
     build:
       targets:
-        UniversalArchiver: all
-    test:
-      gatherCoverageData: true
+        Zipper: all
+    run:
+      config: Debug
+    archive:
+      config: Release

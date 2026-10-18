@@ -1,8 +1,8 @@
 #!/usr/bin/env python3 -I
-"""Repeatable benchmark: Universal Archiver's `archiver` CLI against reference tools on identical
+"""Repeatable benchmark: Zipper's `zipper` CLI against reference tools on identical
 inputs and comparable settings. Writes Markdown and JSON results.
 
-  Scripts/benchmark.py --archiver .build/release/archiver --out Documentation/Benchmarks.md [--scale 1.0]
+  Scripts/benchmark.py --archiver .build/release/zipper --out Documentation/Benchmarks.md [--scale 1.0]
 
 Datasets are generated deterministically (seeded), so runs are comparable over time. Peak memory is
 measured with GNU time (Linux) or /usr/bin/time -l (macOS). Each measurement is the median of N runs.
@@ -164,7 +164,7 @@ def main():
                     xtimes.append(xt); xrss.append(xr)
                     shutil.rmtree(xd)
                     os.remove(out)
-                row[who] = {"name": "Universal Archiver" if who == "ours" else refname,
+                row[who] = {"name": "Zipper" if who == "ours" else refname,
                             "seconds": statistics.median(times), "bytes": statistics.median(sizes),
                             "peak_rss": max(rsss), "extract_seconds": statistics.median(xtimes), "extract_peak_rss": max(xrss)}
             results.append(row)
@@ -199,7 +199,7 @@ def write_report(results):
         "> These numbers come from the environment above. They are **not** Apple Silicon results; run the",
         "> script on an M-series Mac to obtain those. Only identical formats and levels are compared. The",
         "> 7z rows use the bundled 7-Zip engine on both sides, so they show orchestration overhead, not a",
-        "> different compressor. Extraction times use Universal Archiver for both archives.", "",
+        "> different compressor. Extraction times use Zipper for both archives.", "",
         "| Dataset | Format | Tool | Compress (s) | Output | Ratio | Peak RSS | Extract (s) | Extract RSS |",
         "|---|---|---|---:|---:|---:|---:|---:|---:|",
     ]

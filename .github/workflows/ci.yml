@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Core, engines, CLI and tests (Linux)
+    runs-on: ubuntu-24.04
+    container: swift:6.1-noble
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install libraries and reference tools
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libarchive-dev libbrotli-dev liblzma-dev zlib1g-dev \
+            7zip 7zip-rar unar zip unzip lzip lzop zstd lz4 brotli xz-utils bzip2 cpio \
+            lrzip zpaq nomarch jlha-utils python3
+      - name: Build
+        run: swift build --build-tests
+      - name: Test
+        run: swift test --skip-build
+
+  macos:
+    name: macOS app (Xcode) and tests
+    # macOS minutes cost 10× on private repositories: run on pull requests, on demand, or when a
+    # pushed commit message contains [macos].
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[macos]')
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: xcodebuild -version && swift --version
+      - name: Cache vendored libraries
+        id: vendor
+        uses: actions/cache@v4
+        with:
+          path: Vendor/macos
+          key: vendor-${{ runner.os }}-${{ hashFiles('Scripts/build-deps-macos.sh') }}
+      - name: Build pinned dependencies
+        if: steps.vendor.outputs.cache-hit != 'true'
+        run: Scripts/build-deps-macos.sh
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Build the app (Debug, signed to run locally)
+        run: |
+          mkdir -p build
+          if ! xcodebuild -project Zipper.xcodeproj -scheme Zipper -configuration Debug \
+               -destination 'platform=macOS' -derivedDataPath build/DerivedData build > build/xcodebuild.log 2>&1; then
+            echo "::group::Errors"; grep -E "error:" build/xcodebuild.log | sort -u | head -150; echo "::endgroup::"
+            tail -60 build/xcodebuild.log
+            exit 1
+          fi
+          echo "Warnings:"; grep -E "warning:" build/xcodebuild.log | grep -v "/Vendor/" | sort -u | head -80 || true
+      - name: Check the bundle
+        run: |
+          APP=build/DerivedData/Build/Products/Debug/Zipper.app
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          ls -la "$APP/Contents/Helpers" "$APP/Contents/PlugIns"
+          "$APP/Contents/Helpers/zipper" --version
+          plutil -lint "$APP/Contents/Info.plist"
+      - name: Package the app for download
+        run: ditto -c -k --keepParent build/DerivedData/Build/Products/Debug/Zipper.app Zipper-debug.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Zipper-debug-app
+          path: Zipper-debug.zip
+          retention-days: 7
+      - name: Build and test the package (macOS engines, Keychain, Apple Archive)
+        run: |
+          swift build --build-tests
+          swift test --skip-build

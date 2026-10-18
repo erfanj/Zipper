@@ -4,8 +4,13 @@
 #
 #   Scripts/build-deps-macos.sh [--universal]
 #
-# Output: Vendor/macos/{include,lib,lib/pkgconfig} and Vendor/macos/helpers/7zz.
-# Then build with: PKG_CONFIG_PATH="$PWD/Vendor/macos/lib/pkgconfig" swift build -c release
+# Output:
+#   Vendor/macos/xcframeworks/{CArchive,CLzma,CBrotli}.xcframework — used automatically by
+#       Package.swift, so Xcode and `swift build` need no PKG_CONFIG_PATH or Homebrew;
+#   Vendor/macos/{include,lib,lib/pkgconfig} — the plain static libraries;
+#   Vendor/macos/helpers/7zz — the official 7-Zip console binary, bundled as a helper.
+#
+# Needs Xcode's command-line tools (clang, make, libtool, xcodebuild). Takes a few minutes.
 #
 # libarchive is configured to use Apple's CommonCrypto (for ZIP AES/HMAC/PBKDF2), iconv and libxml2
 # from the SDK, and the static xz/zstd/lz4 built here; zlib and bzip2 come from the SDK.
@@ -80,9 +85,11 @@ PC
 tar -xJf "$SRC/libarchive-3.8.9.tar.xz" -C "$B"
 (
   cd "$B/libarchive-3.8.9"
+  # libxml2 (for XAR) comes from the SDK; macOS has no pkg-config, so its flags are given explicitly.
   ./configure --prefix="$PREFIX" --disable-shared --enable-static --without-openssl --without-nettle --without-mbedtls \
     --without-lzo2 --without-cng --with-lzma --with-zstd --with-lz4 --with-bz2lib --with-zlib --with-iconv --with-xml2 \
     --disable-bsdtar --disable-bsdcpio --disable-bsdcat --disable-bsdunzip --disable-acl \
+    LIBXML2_PC_CFLAGS="-I$(xcrun --show-sdk-path)/usr/include/libxml2" LIBXML2_PC_LIBS="-lxml2" \
     CPPFLAGS="-I$PREFIX/include" LDFLAGS="$LDFLAGS -L$PREFIX/lib" >/dev/null
   make -j"$JOBS" >/dev/null && make install >/dev/null
 )
@@ -94,5 +101,54 @@ mkdir -p "$PREFIX/helpers"
 tar -xJf "$SRC/7z2604-mac.tar.xz" -C "$PREFIX/helpers" 7zz License.txt
 mv "$PREFIX/helpers/License.txt" "$PREFIX/helpers/7-Zip-License.txt"
 
+# Static XCFrameworks with module maps, so SwiftPM and Xcode link the pinned libraries directly.
+# Module names match the system-library targets in Package.swift (CArchive, CLzma, CBrotli).
+# Layout: headers at the root of Headers/ (Brotli's own #include <brotli/…> lines need that) and
+# each module map in Headers/<Module>/, because Xcode copies all XCFramework headers into one
+# include/ folder and identically named module maps would collide there.
+XCF="$PREFIX/xcframeworks"
+rm -rf "$XCF"
+mkdir -p "$XCF"
+H="$B/xcf-headers"
+
+mkdir -p "$H/CArchive/CArchive"
+cp "$PREFIX/include/archive.h" "$PREFIX/include/archive_entry.h" "$H/CArchive/"
+cat > "$H/CArchive/CArchive/module.modulemap" <<'MAP'
+module CArchive [system] {
+    header "../archive.h"
+    header "../archive_entry.h"
+    link "bz2"
+    link "z"
+    link "iconv"
+    link "xml2"
+    export *
+}
+MAP
+# liblzma is linked through CLzma, so it is not merged here (it would be duplicated).
+libtool -static -o "$B/libCArchive.a" "$PREFIX/lib/libarchive.a" "$PREFIX/lib/libzstd.a" "$PREFIX/lib/liblz4.a"
+xcodebuild -create-xcframework -library "$B/libCArchive.a" -headers "$H/CArchive" -output "$XCF/CArchive.xcframework" >/dev/null
+
+mkdir -p "$H/CLzma/CLzma"
+cp -R "$PREFIX/include/lzma.h" "$PREFIX/include/lzma" "$H/CLzma/"
+cat > "$H/CLzma/CLzma/module.modulemap" <<'MAP'
+module CLzma [system] {
+    header "../lzma.h"
+    export *
+}
+MAP
+xcodebuild -create-xcframework -library "$PREFIX/lib/liblzma.a" -headers "$H/CLzma" -output "$XCF/CLzma.xcframework" >/dev/null
+
+mkdir -p "$H/CBrotli/CBrotli"
+cp -R "$PREFIX/include/brotli" "$H/CBrotli/"
+cat > "$H/CBrotli/CBrotli/module.modulemap" <<'MAP'
+module CBrotli [system] {
+    header "../brotli/encode.h"
+    header "../brotli/decode.h"
+    export *
+}
+MAP
+libtool -static -o "$B/libCBrotli.a" "$PREFIX/lib/libbrotlienc.a" "$PREFIX/lib/libbrotlidec.a" "$PREFIX/lib/libbrotlicommon.a"
+xcodebuild -create-xcframework -library "$B/libCBrotli.a" -headers "$H/CBrotli" -output "$XCF/CBrotli.xcframework" >/dev/null
+
 echo "Dependencies installed in $PREFIX"
-echo "Build with: PKG_CONFIG_PATH=\"$PREFIX/lib/pkgconfig\" swift build -c release --arch arm64"
+echo "Package.swift now uses $XCF automatically: run 'swift build' or 'xcodegen generate' and build in Xcode."

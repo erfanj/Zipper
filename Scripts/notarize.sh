@@ -1,16 +1,34 @@
 #!/usr/bin/env bash
-# Submits the DMG to Apple's notary service and staples the ticket.
-# Requires a Developer ID certificate and an App Store Connect API key or app-specific password
-# stored with:  xcrun notarytool store-credentials "UA_NOTARY" --apple-id ... --team-id ...
+# Submits Zipper to Apple's notary service, waits for the verdict and staples the ticket.
 #
-#   Scripts/notarize.sh dist/UniversalArchiver-0.1.0.dmg
+# One-time setup (an app-specific password from appleid.apple.com, or an App Store Connect API key):
+#   xcrun notarytool store-credentials "ZIPPER_NOTARY" --apple-id you@example.com --team-id TEAMID
 #
-# Nothing in this repository has been notarized: no Developer ID credentials were available when it
-# was built. Run this yourself after Scripts/build-app.sh --sign ... and Scripts/make-dmg.sh --sign ...
+#   Scripts/notarize.sh dist/Zipper.app          # zips, submits, staples the app itself
+#   Scripts/notarize.sh dist/Zipper-1.0.0.dmg    # submits and staples the disk image
+#
+# Notarize the app first, then build the DMG from the stapled app and notarize the DMG too: both
+# then open without a network connection to Apple.
 set -euo pipefail
-DMG="$1"
-PROFILE="${NOTARY_PROFILE:-UA_NOTARY}"
-xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait
-xcrun stapler staple "$DMG"
-spctl --assess --type open --context context:primary-signature --verbose "$DMG"
-echo "Notarized and stapled: $DMG"
+TARGET="${1:?Usage: Scripts/notarize.sh dist/Zipper.app | dist/Zipper-<version>.dmg}"
+PROFILE="${NOTARY_PROFILE:-ZIPPER_NOTARY}"
+SUBMIT="$TARGET"
+if [[ "$TARGET" == *.app ]]; then
+  SUBMIT="$(mktemp -d)/$(basename "$TARGET" .app).zip"
+  ditto -c -k --keepParent "$TARGET" "$SUBMIT"   # the notary service takes zips, DMGs and pkgs
+fi
+OUT=$(xcrun notarytool submit "$SUBMIT" --keychain-profile "$PROFILE" --wait 2>&1 | tee /dev/stderr)
+if ! grep -q "status: Accepted" <<<"$OUT"; then
+  ID=$(grep -m1 -E "^\s*id:" <<<"$OUT" | awk '{print $2}')
+  echo "Notarization failed. Apple's log explains why:" >&2
+  [[ -n "$ID" ]] && xcrun notarytool log "$ID" --keychain-profile "$PROFILE" >&2
+  exit 1
+fi
+xcrun stapler staple "$TARGET"
+xcrun stapler validate "$TARGET"
+if [[ "$TARGET" == *.app ]]; then
+  spctl --assess --type execute --verbose "$TARGET"
+else
+  spctl --assess --type open --context context:primary-signature --verbose "$TARGET"
+fi
+echo "Notarized and stapled: $TARGET"
