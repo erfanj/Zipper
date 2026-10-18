@@ -4,10 +4,13 @@ Honest list of what is not done, not verified, or not possible.
 
 ## Not yet verified
 
-* **The app builds on macOS, but its UI hasn't been exercised by automated tests.** The macOS CI
-  job (`.github/workflows/ci.yml`, Xcode 16.4 on macOS 15) builds the app, the Quick Look extension
-  and the embedded `zipper` tool, verifies the signature and bundle layout, and runs the whole test
-  suite on macOS against the bundled libarchive 3.8.9 and 7-Zip. Not covered by any automated test:
+* **The app builds and runs on macOS, but most of its UI isn't covered by automated tests.** The
+  macOS CI job (`.github/workflows/ci.yml`, Xcode 16.4 on macOS 15) builds the app, the Quick Look
+  extension and the embedded `zipper` tool, verifies the signature and bundle layout, and runs the
+  whole test suite on macOS against the bundled libarchive 3.8.9 and 7-Zip. The release workflow
+  builds the universal DMG and runs it (`Scripts/smoke-test-app.sh`): the app launches, opens an
+  archive and quits cleanly, and the bundled tools round-trip an encrypted 7z on both
+  architectures. Not covered by any automated test:
   * the views' behaviour (keyboard navigation, VoiceOver, drag and drop, light and dark mode);
   * Finder Quick Actions, Shortcuts, Dock progress and notifications at run time;
   * the Quick Look preview inside Finder;

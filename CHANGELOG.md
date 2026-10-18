@@ -118,6 +118,16 @@
   reasonable time, and `.quickLookPreview` needs `import QuickLook`. The build's warnings are fixed
   too, including an allocation check in the libarchive writer that could never fail (the pointer
   was declared doubly optional).
+* **Release builds:** `Scripts/release.sh` makes the universal (Apple silicon and Intel) release
+  DMG in one command, and `.github/workflows/release.yml` does it on a GitHub-hosted Mac, signing
+  and notarizing when the Developer ID secrets exist. Every release build is then run:
+  `Scripts/smoke-test-app.sh` launches the app, has it open an archive (the app reports the result),
+  quits it, and round-trips an encrypted 7z with the bundled tools on both architectures. The
+  pipeline was reviewed adversarially before its first run; 11 problems were fixed, among them a
+  later push cancelling a release mid-notarization and dependency rebuilds failing on fat archives.
+* **First look at the running app:** the release build's screenshots showed the archive list's
+  columns overflowing a default-size window, and the Tools menu ahead of Extract in an archive's
+  toolbar. Both fixed.
 * **Scripts and CI:** `build-app.sh` left `$(…)` placeholders in Info.plist. `notarize.sh`
   notarizes and staples apps and DMGs and prints Apple's log on rejection. `make-dmg.sh` takes the
   exported app. Added `Packaging/ExportOptions.plist` and a CI workflow (Linux tests; macOS app
