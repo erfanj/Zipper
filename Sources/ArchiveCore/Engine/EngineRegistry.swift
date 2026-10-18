@@ -19,9 +19,15 @@ public struct EngineRequirements: Sendable {
 /// code from disk at runtime; helper executables used by some engines are resolved only from the
 /// app bundle or fixed system locations.
 public final class EngineRegistry: @unchecked Sendable {
-    public private(set) var engines: [ArchiveEngine]
-    /// User override: preferred engine per format.
-    public var preferred: [FormatID: EngineID] = [:]
+    public let engines: [ArchiveEngine]
+    private let lock = NSLock()
+    private var _preferred: [FormatID: EngineID] = [:]
+
+    /// User override: preferred engine per format. Read by worker threads while the UI may change it.
+    public var preferred: [FormatID: EngineID] {
+        get { lock.lock(); defer { lock.unlock() }; return _preferred }
+        set { lock.lock(); _preferred = newValue; lock.unlock() }
+    }
 
     public init(engines: [ArchiveEngine]) {
         self.engines = engines

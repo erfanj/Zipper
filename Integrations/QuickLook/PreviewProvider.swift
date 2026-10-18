@@ -24,8 +24,12 @@ final class PreviewProvider: QLPreviewProvider, QLPreviewingController {
         do {
             guard let d = try FormatDetector.detect(url) else { return page(body + "<p>Not a recognised archive.</p>") }
             // In-process engine only: the extension is sandboxed and never starts helper processes.
+            // Compressed tarballs have no index, so listing means decompressing; give up after a few
+            // seconds rather than keep Finder waiting.
             let engine = LibArchiveEngine()
-            let listing = try engine.list(d.source(for: url), options: ReadOptions(), progress: OperationProgress())
+            let progress = OperationProgress()
+            DispatchQueue.global().asyncAfter(deadline: .now() + 4) { progress.cancel() }
+            let listing = try engine.list(d.source(for: url), options: ReadOptions(), progress: progress)
             let size = d.source(for: url).totalSize
             body += "<p class=meta>\(esc(FormatCatalog.descriptor(for: d.format)?.name ?? d.format.rawValue)) · \(listing.fileCount) files · \(listing.directoryCount) folders · "
             body += "\(listing.totalUncompressedSize.map(ByteFormatting.string) ?? "unknown size") uncompressed · \(ByteFormatting.string(size)) on disk"
@@ -40,8 +44,10 @@ final class PreviewProvider: QLPreviewProvider, QLPreviewingController {
             body += "</table>"
         } catch let e as ArchiveError {
             switch e {
+            case .cancelled:
+                body += "<p>This archive is too large to list quickly. Open it in \(ProductInfo.name) to see what's inside.</p>"
             case .passwordRequired, .incorrectPassword, .unsupportedEncryption:
-                body += "<p>🔒 This archive is encrypted, including its file names. Open it in Universal Archiver to enter the password.</p>"
+                body += "<p>🔒 This archive is encrypted, including its file names. Open it in \(ProductInfo.name) to enter the password.</p>"
             default:
                 body += "<p>\(esc(e.explanation))</p>"
             }

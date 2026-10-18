@@ -1,56 +1,61 @@
 // swift-tools-version:5.10
 //
-// Universal Archiver — Swift package manifest.
+// Zipper — Swift package manifest.
 //
 // Targets:
-//   CArchive / CZlib / CBrotli / CLzma — system-library shims for the C engines.
-//   ArchiveCore                 — engine-agnostic model, format registry, detection, safety.
-//   ArchiveEngines              — concrete engine providers (libarchive, 7-Zip, Brotli, unar, RAR, Apple Archive).
-//   ArchiverKit                 — high-level services (compress, extract, convert, test, repair, split, compare…).
-//   archiver                    — command-line companion.
-//   UniversalArchiver           — the macOS SwiftUI application (compiles to a stub on non-Apple platforms).
+//   CArchive / CBrotli / CLzma / CZlib — the C libraries. On macOS, once Scripts/build-deps-macos.sh
+//                               has built Vendor/macos/xcframeworks, the pinned static XCFrameworks
+//                               are linked (self-contained; Xcode needs no environment setup).
+//                               Otherwise the system libraries are found with pkg-config (Linux,
+//                               or Homebrew during development).
+//   ArchiveCore               — engine-agnostic model, format registry, detection, safety.
+//   ArchiveEngines            — engines (libarchive, 7-Zip, Brotli, unar, RAR, Apple Archive, hdiutil).
+//   ArchiverKit               — services (compress, extract, convert, test, repair, split, compare…).
+//   ZipperCLI                 — the `zipper` command-line tool.
+//   ZipperMac                 — the macOS SwiftUI app (a stub on other platforms). Release builds
+//                               go through project.yml, which adds the Quick Look extension.
 //
+import Foundation
 import PackageDescription
 
+let vendoredFrameworks = "Vendor/macos/xcframeworks"
+let useVendoredLibraries = FileManager.default.fileExists(
+    atPath: "\(Context.packageDirectory)/\(vendoredFrameworks)/CArchive.xcframework")
+
+/// A C library: the vendored static XCFramework when it has been built, else a pkg-config system library.
+func cLibrary(_ name: String, pkgConfig: String?, brew: [String], apt: [String]) -> Target {
+    if useVendoredLibraries {
+        return .binaryTarget(name: name, path: "\(vendoredFrameworks)/\(name).xcframework")
+    }
+    return .systemLibrary(name: name, path: "Sources/\(name)", pkgConfig: pkgConfig,
+                          providers: [.brew(brew), .apt(apt)])
+}
+
+let linuxObservationWorkaround: [LinkerSetting] = [
+    .unsafeFlags(["-Xlinker", "--allow-shlib-undefined"], .when(platforms: [.linux])),
+]
+
 let package = Package(
-    name: "UniversalArchiver",
+    name: "Zipper",
     defaultLocalization: "en",
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "ArchiveCore", targets: ["ArchiveCore"]),
         .library(name: "ArchiveEngines", targets: ["ArchiveEngines"]),
         .library(name: "ArchiverKit", targets: ["ArchiverKit"]),
-        .executable(name: "archiver", targets: ["archiver"]),
-        .executable(name: "UniversalArchiver", targets: ["UniversalArchiver"]),
+        .executable(name: "zipper", targets: ["ZipperCLI"]),
+        .executable(name: "ZipperMac", targets: ["ZipperMac"]),
     ],
     dependencies: [
         // Only used on non-Apple platforms; on macOS the identical CryptoKit API is used.
         .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0"..<"4.0.0"),
     ],
     targets: [
-        .systemLibrary(
-            name: "CArchive",
-            path: "Sources/CArchive",
-            pkgConfig: "libarchive",
-            providers: [.brew(["libarchive"]), .apt(["libarchive-dev"])]
-        ),
-        .systemLibrary(
-            name: "CZlib",
-            path: "Sources/CZlib",
-            providers: [.apt(["zlib1g-dev"])]
-        ),
-        .systemLibrary(
-            name: "CBrotli",
-            path: "Sources/CBrotli",
-            pkgConfig: "libbrotlienc",
-            providers: [.brew(["brotli"]), .apt(["libbrotli-dev"])]
-        ),
-        .systemLibrary(
-            name: "CLzma",
-            path: "Sources/CLzma",
-            pkgConfig: "liblzma",
-            providers: [.brew(["xz"]), .apt(["liblzma-dev"])]
-        ),
+        cLibrary("CArchive", pkgConfig: "libarchive", brew: ["libarchive"], apt: ["libarchive-dev"]),
+        cLibrary("CBrotli", pkgConfig: "libbrotlienc", brew: ["brotli"], apt: ["libbrotli-dev"]),
+        cLibrary("CLzma", pkgConfig: "liblzma", brew: ["xz"], apt: ["liblzma-dev"]),
+        // zlib ships with macOS and every Linux distribution, so it is never vendored.
+        .systemLibrary(name: "CZlib", path: "Sources/CZlib", providers: [.apt(["zlib1g-dev"])]),
         .target(
             name: "ArchiveCore",
             dependencies: [
@@ -67,13 +72,16 @@ let package = Package(
             dependencies: ["ArchiveCore", "ArchiveEngines", "CZlib"]
         ),
         .executableTarget(
-            name: "archiver",
+            name: "ZipperCLI",
             dependencies: ["ArchiverKit", "ArchiveEngines", "ArchiveCore"]
         ),
         .executableTarget(
-            name: "UniversalArchiver",
+            name: "ZipperMac",
             dependencies: ["ArchiverKit", "ArchiveEngines", "ArchiveCore"],
-            exclude: ["Info.plist", "UniversalArchiver.entitlements", "Resources"]
+            exclude: ["Info.plist", "Zipper.entitlements", "Resources"],
+            // Linux only: the app's model code is compiled (and type-checked) there too, and the Linux
+            // toolchain's libswiftObservation.so references a runtime symbol it doesn't export.
+            linkerSettings: linuxObservationWorkaround
         ),
         .target(
             name: "UATestSupport",
@@ -99,6 +107,11 @@ let package = Package(
         .testTarget(
             name: "InteropTests",
             dependencies: ["UATestSupport", "ArchiverKit", "ArchiveEngines", "ArchiveCore"]
+        ),
+        .testTarget(
+            name: "ZipperMacTests",
+            dependencies: ["ZipperMac", "ArchiverKit", "ArchiveCore"],
+            linkerSettings: linuxObservationWorkaround
         ),
     ]
 )

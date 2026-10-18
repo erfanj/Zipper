@@ -79,7 +79,7 @@ public final class DiskImageEngine: ArchiveEngine, @unchecked Sendable {
     private func withMounted<T>(_ source: ArchiveSource, options: ReadOptions, progress: OperationProgress, _ body: (URL) throws -> T) throws -> T {
         guard options.allowMountingDiskImages else {
             throw ArchiveError.operationNotSupported(format: .dmg, operation: "mounting",
-                reason: "Reading this disk image requires mounting it read-only. Universal Archiver only does that with your permission.")
+                reason: "Reading this disk image requires mounting it read-only. \(ProductInfo.name) only does that with your permission.")
         }
         let mountRoot = FileManager.default.temporaryDirectory.appendingPathComponent("ua-mounts-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: mountRoot, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])

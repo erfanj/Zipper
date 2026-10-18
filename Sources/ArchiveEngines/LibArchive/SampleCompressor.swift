@@ -33,7 +33,7 @@ public struct LibArchiveSampleCompressor: SampleCompressor {
         default: return nil
         }
         guard rc == LA.ok else { return nil }
-        let filter = ["deflate": "gzip", "zlib": "gzip", "bzip2": "bzip2", "xz": "xz", "lzma2": "xz", "lzma": "lzma", "zstd": "zstd", "lz4": "lz4"][method.rawValue]!
+        guard let filter = ["deflate": "gzip", "zlib": "gzip", "bzip2": "bzip2", "xz": "xz", "lzma2": "xz", "lzma": "lzma", "zstd": "zstd", "lz4": "lz4"][method.rawValue] else { return nil }
         let lvl = filter == "zstd" ? LibArchiveWriter.zstdLevels[min(9, max(0, level))] : max(1, min(9, level))
         _ = archive_write_set_filter_option(a, filter, "compression-level", String(lvl))
         archive_write_set_bytes_in_last_block(a, 1)

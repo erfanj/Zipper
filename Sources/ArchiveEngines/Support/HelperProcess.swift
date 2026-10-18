@@ -74,7 +74,17 @@ final class HelperProcess {
         self.arguments = arguments
     }
 
+    /// Writing a password to a helper that has already exited must fail with EPIPE, not kill the
+    /// whole process with SIGPIPE (the default action). Done once, before the first helper starts.
+    private static let ignoreSIGPIPE: Void = { signal(SIGPIPE, SIG_IGN) }()
+
+    /// Writes `bytes` to the helper's stdin, ignoring a closed pipe (the helper reports its own error).
+    private static func send(_ bytes: [UInt8], to handle: FileHandle) {
+        try? handle.write(contentsOf: Data(bytes))
+    }
+
     func run() throws -> Result {
+        _ = Self.ignoreSIGPIPE
         let p = Process()
         p.executableURL = executable
         p.arguments = arguments
@@ -111,7 +121,7 @@ final class HelperProcess {
                     secret.withBytes { bytes in
                         var line = bytes
                         line.append(0x0A)
-                        stdinHandle.write(Data(line))
+                        Self.send(line, to: stdinHandle)
                         // Wipe the temporary copy.
                         for i in line.indices { line[i] = 0 }
                     }
@@ -144,15 +154,20 @@ final class HelperProcess {
         }
 
         var cancelled = false
-        progress?.onCancel { [weak p] in
-            cancelled = true
-            p?.terminate()
+        var tokens: [OperationProgress.HandlerToken] = []
+        if let progress {
+            tokens.append(progress.onCancel { [weak p] in
+                cancelled = true
+                p?.terminate()
+            })
+            tokens.append(progress.onPauseChange { [weak p] paused in
+                guard let p, p.isRunning else { return }
+                // Suspending a helper is safe: it simply stops being scheduled until resumed.
+                kill(p.processIdentifier, paused ? SIGSTOP : SIGCONT)
+            })
         }
-        progress?.onPauseChange { [weak p] paused in
-            guard let p, p.isRunning else { return }
-            // Suspending a helper is safe: it simply stops being scheduled until resumed.
-            kill(p.processIdentifier, paused ? SIGSTOP : SIGCONT)
-        }
+        // Only this run's handlers are removed: the progress object may be shared with other work.
+        defer { progress?.removeHandlers(tokens) }
         do { try p.run() } catch {
             throw ArchiveError.engineUnavailable(EngineID(rawValue: executable.lastPathComponent), reason: error.localizedDescription)
         }
@@ -160,7 +175,7 @@ final class HelperProcess {
             input.withBytes { bytes in
                 var buf = bytes
                 buf.append(0)
-                stdinHandle.write(Data(buf))
+                Self.send(buf, to: stdinHandle)
                 for i in buf.indices { buf[i] = 0 }
             }
             try? stdinHandle.close()
@@ -176,7 +191,6 @@ final class HelperProcess {
         outData.append(restOut)
         errData.append(restErr)
         lock.unlock()
-        progress?.clearCancelHandlers()
         if cancelled || progress?.isCancelled == true { throw ArchiveError.cancelled }
         var result = Result(status: p.terminationStatus, stdout: String(decoding: outData, as: UTF8.self),
                             stderr: String(decoding: errData, as: UTF8.self), wasCancelled: false)
@@ -273,7 +287,7 @@ enum ProbeCache {
 
     static let directory: URL = {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
-        return base.appendingPathComponent("UniversalArchiver/probes", isDirectory: true)
+        return base.appendingPathComponent("\(ProductInfo.cacheFolderName)/probes", isDirectory: true)
     }()
 
     static func run(_ exe: URL, _ args: [String]) -> (status: Int32, stdout: String)? {

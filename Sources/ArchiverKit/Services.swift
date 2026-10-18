@@ -4,6 +4,9 @@ import ArchiveEngines
 #if canImport(Security)
 import Security
 #endif
+#if canImport(LocalAuthentication)
+import LocalAuthentication
+#endif
 
 // MARK: - Activity history
 
@@ -38,18 +41,24 @@ public struct HistoryRecord: Codable, Sendable, Identifiable, Hashable {
 
 public final class ActivityHistory: @unchecked Sendable {
     public let fileURL: URL
-    public var isEnabled: Bool
     public var maxRecords = 1000
     private let lock = NSLock()
+    private var _isEnabled: Bool
+
+    /// Toggled from the UI while operations record from worker threads.
+    public var isEnabled: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _isEnabled }
+        set { lock.lock(); _isEnabled = newValue; lock.unlock() }
+    }
 
     public init(fileURL: URL, isEnabled: Bool = true) {
         self.fileURL = fileURL
-        self.isEnabled = isEnabled
+        _isEnabled = isEnabled
     }
 
     public func add(_ r: HistoryRecord) {
-        guard isEnabled else { return }
         lock.lock(); defer { lock.unlock() }
+        guard _isEnabled else { return }
         var all = loadUnlocked()
         all.insert(r, at: 0)
         if all.count > maxRecords { all.removeLast(all.count - maxRecords) }
@@ -234,54 +243,72 @@ public final class QueuedOperation: @unchecked Sendable, Identifiable {
 /// Runs archive operations in the background with a concurrency limit derived from the
 /// performance mode. Operations keep running when windows close (as long as the app runs).
 public final class OperationCenter: @unchecked Sendable {
-    public private(set) var operations: [QueuedOperation] = []
-    public var mode: PerformanceMode = .balanced
-    public var history: ActivityHistory?
-    public var onChange: (@Sendable () -> Void)?
     private let lock = NSLock()
+    private var _operations: [QueuedOperation] = []
+    private var _mode: PerformanceMode
     private var running = 0
+    private var pendingInputs: [UUID: [String]] = [:]
+    public var history: ActivityHistory?
+    /// Called (on any thread) whenever an operation is added, changes state or is removed.
+    public var onChange: (@Sendable () -> Void)?
 
     public init(mode: PerformanceMode = .balanced, history: ActivityHistory? = nil) {
-        self.mode = mode
+        _mode = mode
         self.history = history
     }
 
+    public var operations: [QueuedOperation] { lock.lock(); defer { lock.unlock() }; return _operations }
+
+    public var mode: PerformanceMode {
+        get { lock.lock(); defer { lock.unlock() }; return _mode }
+        set { lock.lock(); _mode = newValue; lock.unlock() }
+    }
+
+    /// Adds an operation and starts it when a slot is free. `onStateChange` is installed before the
+    /// work can start, so even an operation that fails instantly reports its outcome.
     @discardableResult
-    public func enqueue(_ title: String, kind: HistoryRecord.Kind, inputs: [String] = [], work: @escaping (OperationProgress) throws -> String) -> QueuedOperation {
+    public func enqueue(_ title: String, kind: HistoryRecord.Kind, inputs: [String] = [],
+                        onStateChange: (@Sendable (QueuedOperation) -> Void)? = nil,
+                        work: @escaping (OperationProgress) throws -> String) -> QueuedOperation {
         let op = QueuedOperation(title: title, kind: kind, work: work)
-        op.onChange = { [weak self] _ in self?.onChange?() }
-        lock.lock(); operations.append(op); lock.unlock()
+        op.onChange = { [weak self] o in
+            onStateChange?(o)
+            self?.onChange?()
+        }
+        lock.lock()
+        _operations.append(op)
+        pendingInputs[op.id] = inputs
+        lock.unlock()
         onChange?()
-        pump(inputs: [op.id: inputs])
+        pump()
         return op
     }
 
-    private var pendingInputs: [UUID: [String]] = [:]
-
-    private func pump(inputs: [UUID: [String]] = [:]) {
+    private func pump() {
         lock.lock()
-        pendingInputs.merge(inputs) { a, _ in a }
-        let limit = SystemProfile.current().concurrentOperations(for: mode)
-        var toStart: [QueuedOperation] = []
-        for op in operations where op.state == .queued && running + toStart.count < limit {
-            toStart.append(op)
+        let limit = SystemProfile.current().concurrentOperations(for: _mode)
+        let qos = _mode.qos
+        var toStart: [(QueuedOperation, [String])] = []
+        for op in _operations where op.state == .queued && running + toStart.count < limit {
+            toStart.append((op, pendingInputs.removeValue(forKey: op.id) ?? []))
         }
         running += toStart.count
         lock.unlock()
-        for op in toStart {
+        for (op, inputs) in toStart {
             op.set(.running)
-            let ins = pendingInputs[op.id] ?? []
-            DispatchQueue.global(qos: mode.qos).async { [weak self] in
+            DispatchQueue.global(qos: qos).async { [weak self] in
                 let start = Date()
+                let activity = Self.beginActivity(op.title)
                 do {
                     let summary = try op.work(op.progress)
                     op.set(.succeeded, summary: summary)
-                    self?.history?.add(HistoryRecord(kind: op.kind, inputs: ins, output: nil, succeeded: true, summary: summary, duration: Date().timeIntervalSince(start)))
+                    self?.history?.add(HistoryRecord(kind: op.kind, inputs: inputs, output: nil, succeeded: true, summary: summary, duration: Date().timeIntervalSince(start)))
                 } catch {
                     let e = ArchiveError.wrap(error)
                     if case .cancelled = e { op.set(.cancelled) } else { op.set(.failed, error: e) }
-                    self?.history?.add(HistoryRecord(kind: op.kind, inputs: ins, output: nil, succeeded: false, summary: e.title, duration: Date().timeIntervalSince(start)))
+                    self?.history?.add(HistoryRecord(kind: op.kind, inputs: inputs, output: nil, succeeded: false, summary: e.title, duration: Date().timeIntervalSince(start)))
                 }
+                Self.endActivity(activity)
                 self?.lock.lock()
                 self?.running -= 1
                 self?.lock.unlock()
@@ -291,11 +318,29 @@ public final class OperationCenter: @unchecked Sendable {
         }
     }
 
-    public var active: [QueuedOperation] { operations.filter { [.queued, .running, .paused].contains($0.state) } }
-    public var finished: [QueuedOperation] { operations.filter { ![.queued, .running, .paused].contains($0.state) } }
+    /// Keeps macOS from throttling (App Nap) or terminating (automatic and sudden termination)
+    /// the app while it is writing files, even when its windows are hidden or closed.
+    private static func beginActivity(_ reason: String) -> NSObjectProtocol? {
+        #if os(macOS)
+        return ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: reason)
+        #else
+        return nil
+        #endif
+    }
+
+    private static func endActivity(_ token: NSObjectProtocol?) {
+        #if os(macOS)
+        if let token { ProcessInfo.processInfo.endActivity(token) }
+        #endif
+    }
+
+    private static let activeStates: Set<QueuedOperation.State> = [.queued, .running, .paused]
+
+    public var active: [QueuedOperation] { operations.filter { Self.activeStates.contains($0.state) } }
+    public var finished: [QueuedOperation] { operations.filter { !Self.activeStates.contains($0.state) } }
 
     public func clearFinished() {
-        lock.lock(); operations.removeAll { ![.queued, .running, .paused].contains($0.state) }; lock.unlock()
+        lock.lock(); _operations.removeAll { !Self.activeStates.contains($0.state) }; lock.unlock()
         onChange?()
     }
 
@@ -342,29 +387,29 @@ public final class InMemoryPasswordStore: PasswordStore, @unchecked Sendable {
 }
 
 #if os(macOS)
-/// Keychain-backed store (generic passwords in the login keychain, this app only).
+/// Keychain-backed store (generic passwords in the login keychain, readable only by this app).
+///
+/// "Require authentication" is enforced with LocalAuthentication before the item is read, rather
+/// than with a `SecAccessControl`: access-control flags need the data-protection keychain, which a
+/// Developer ID app can only use with a provisioning profile and keychain entitlements. The flag is
+/// stored with each item, so changing the setting later doesn't unlock existing passwords.
 public final class KeychainPasswordStore: PasswordStore, @unchecked Sendable {
     public let service: String
+    static let requiresAuthenticationMarker = "requires-authentication"
 
     public init(service: String = "\(ProductInfo.bundleIdentifier).archive-passwords") { self.service = service }
 
+    private func baseQuery(_ archiveKey: String) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: archiveKey]
+    }
+
     public func save(_ secret: Secret, for archiveKey: String, label: String, requireAuthentication: Bool) throws {
         try? delete(archiveKey)
-        var query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: archiveKey,
-            kSecAttrLabel as String: "\(ProductInfo.name): \(label)",
-            kSecValueData as String: secret.withBytes { Data($0) },
-        ]
-        if requireAuthentication {
-            var err: Unmanaged<CFError>?
-            if let ac = SecAccessControlCreateWithFlags(nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, .userPresence, &err) {
-                query[kSecAttrAccessControl as String] = ac
-            }
-        } else {
-            query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        }
+        var query = baseQuery(archiveKey)
+        query[kSecAttrLabel as String] = "\(ProductInfo.name): \(label)"
+        query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
+        query[kSecValueData as String] = secret.withBytes { Data($0) }
+        if requireAuthentication { query[kSecAttrGeneric as String] = Data(Self.requiresAuthenticationMarker.utf8) }
         let status = SecItemAdd(query as CFDictionary, nil)
         guard status == errSecSuccess else {
             throw ArchiveError.internalError("Keychain error \(status): \(SecCopyErrorMessageString(status, nil) as String? ?? "")")
@@ -372,22 +417,42 @@ public final class KeychainPasswordStore: PasswordStore, @unchecked Sendable {
     }
 
     public func password(for archiveKey: String, prompt: String?) -> Secret? {
-        var query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: archiveKey,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        if let prompt { query[kSecUseOperationPrompt as String] = prompt }
+        // Read the attributes first (no secret, no prompt) to learn whether the user asked for authentication.
+        var attrQuery = baseQuery(archiveKey)
+        attrQuery[kSecReturnAttributes as String] = true
+        attrQuery[kSecMatchLimit as String] = kSecMatchLimitOne
+        var attrs: CFTypeRef?
+        guard SecItemCopyMatching(attrQuery as CFDictionary, &attrs) == errSecSuccess, let a = attrs as? [String: Any] else { return nil }
+        if let marker = a[kSecAttrGeneric as String] as? Data, marker == Data(Self.requiresAuthenticationMarker.utf8) {
+            guard Self.authenticate(reason: prompt ?? "use a saved archive password") else { return nil }
+        }
+        var query = baseQuery(archiveKey)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
         var out: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess, let data = out as? Data else { return nil }
         return Secret(bytes: [UInt8](data))
     }
 
+    /// Asks for Touch ID, Apple Watch or the login password. Blocks the calling (worker) thread.
+    static func authenticate(reason: String) -> Bool {
+        precondition(!Thread.isMainThread, "authentication must not block the main thread")
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else { return false }
+        final class Outcome: @unchecked Sendable { var success = false }
+        let outcome = Outcome()
+        let done = DispatchSemaphore(value: 0)
+        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, _ in
+            outcome.success = success
+            done.signal()
+        }
+        done.wait()
+        return outcome.success
+    }
+
     public func delete(_ archiveKey: String) throws {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: archiveKey]
-        let s = SecItemDelete(query as CFDictionary)
+        let s = SecItemDelete(baseQuery(archiveKey) as CFDictionary)
         guard s == errSecSuccess || s == errSecItemNotFound else { throw ArchiveError.internalError("Keychain error \(s)") }
     }
 
@@ -499,38 +564,28 @@ public struct PasswordStrength: Sendable {
     }
 }
 
-// MARK: - Product info (rename the product here)
-
-public enum ProductInfo {
-    /// Working name. Change here (and in Info.plist / project.yml) before release.
-    public static let name = "Universal Archiver"
-    public static let bundleIdentifier = "com.example.universalarchiver"
-    public static let cliName = "archiver"
-    public static let version = "0.1.0"
-
-    public static var applicationSupport: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".config")
-        return base.appendingPathComponent(name, isDirectory: true)
-    }
-}
-
 // MARK: - Diagnostics
 
 /// Diagnostic log with redaction: file names and paths are replaced by stable placeholders unless
 /// the user explicitly includes them when exporting.
 public final class DiagnosticLog: @unchecked Sendable {
     public static let shared = DiagnosticLog()
-    public var isEnabled = false
     private var lines: [String] = []
     private let lock = NSLock()
+    private var _isEnabled = false
+    private let timestamps = ISO8601DateFormatter()
+
+    public var isEnabled: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _isEnabled }
+        set { lock.lock(); _isEnabled = newValue; lock.unlock() }
+    }
 
     public func log(_ message: String, paths: [String] = []) {
         guard isEnabled else { return }
         var m = message
         for p in paths { m = m.replacingOccurrences(of: p, with: Self.redact(p)) }
         lock.lock()
-        lines.append("\(ISO8601DateFormatter().string(from: Date())) \(m)")
+        lines.append("\(timestamps.string(from: Date())) \(m)")
         if lines.count > 5000 { lines.removeFirst(lines.count - 5000) }
         lock.unlock()
     }

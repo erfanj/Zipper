@@ -1,6 +1,6 @@
 import Foundation
 
-/// The catalogue of formats Universal Archiver knows how to recognise.
+/// The catalogue of formats Zipper knows how to recognise.
 ///
 /// Recognition is not support: a format listed here may have no engine able to open it on a given
 /// machine. Use `EngineRegistry.capabilityMatrix()` for what is actually possible.

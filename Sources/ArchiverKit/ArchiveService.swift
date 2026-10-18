@@ -27,9 +27,21 @@ public struct OpenedArchive: Sendable {
 /// `OperationProgress` for progress, pause and cancellation.
 public final class ArchiveService: @unchecked Sendable {
     public let registry: EngineRegistry
-    public var fallbackPolicy: FallbackPolicy = .automatic
+    private let lock = NSLock()
+    private var _fallbackPolicy: FallbackPolicy = .automatic
+    private var _performanceMode: PerformanceMode = .balanced
+
+    /// The service is shared by concurrent operations, so its settings are lock-protected.
+    public var fallbackPolicy: FallbackPolicy {
+        get { lock.lock(); defer { lock.unlock() }; return _fallbackPolicy }
+        set { lock.lock(); _fallbackPolicy = newValue; lock.unlock() }
+    }
+
     /// Drives thread counts for engines that support multithreading.
-    public var performanceMode: PerformanceMode = .balanced
+    public var performanceMode: PerformanceMode {
+        get { lock.lock(); defer { lock.unlock() }; return _performanceMode }
+        set { lock.lock(); _performanceMode = newValue; lock.unlock() }
+    }
 
     public init(registry: EngineRegistry = DefaultEngines.registry()) {
         self.registry = registry
@@ -124,10 +136,22 @@ public final class ArchiveService: @unchecked Sendable {
         }
         let source = detection.source(for: url)
         var notes: [String] = []
-        let (listing, engine) = try withEngines(for: detection.format, EngineRequirements(operations: .inspect), notes: &notes) {
-            try $0.list(source, options: options, progress: progress)
+        do {
+            let (listing, engine) = try withEngines(for: detection.format, EngineRequirements(operations: .inspect), notes: &notes) {
+                try $0.list(source, options: options, progress: progress)
+            }
+            return OpenedArchive(url: url, detection: detection, source: source, listing: listing, engine: engine, engineNotes: notes)
+        } catch let e as ArchiveError {
+            throw Self.reframeUnrecognised(e, detection: detection, url: url)
         }
-        return OpenedArchive(url: url, detection: detection, source: source, listing: listing, engine: engine, engineNotes: notes)
+    }
+
+    /// When only the file name suggested a format (no content signature matched) and the helper
+    /// tool could not read it either, the honest message is "not an archive", not the tool's raw output.
+    static func reframeUnrecognised(_ e: ArchiveError, detection: DetectionResult, url: URL) -> ArchiveError {
+        guard detection.basis == .extensionOnly, detection.multipart == nil else { return e }
+        if case .externalTool = e { return .notAnArchive(path: url.path) }
+        return e
     }
 
     // MARK: Test

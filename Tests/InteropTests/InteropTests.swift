@@ -92,12 +92,43 @@ final class ForwardInteropTests: XCTestCase {
                 passed += 1
                 rows.append("PASS  \(fx.file.padding(toLength: 34, withPad: " ", startingAt: 0)) \(opened.engine.rawValue)/\(o.engine.rawValue)\(fx.note.map { "  (\($0))" } ?? "")")
             } catch {
-                rows.append("FAIL  \(fx.file): \(ArchiveError.wrap(error))")
+                let e = ArchiveError.wrap(error)
+                if let reason = Self.missingHelper(for: fx, error: e) {
+                    missing += 1
+                    rows.append("SKIP  \(fx.file) (\(reason))")
+                    continue
+                }
+                rows.append("FAIL  \(fx.file): \(e)")
                 XCTFail("\(fx.file): \(error)")
             }
         }
-        print("Interop results: \(passed) passed, \(missing) not present, \(manifest.fixtures.count - passed - missing) failed\n" + rows.joined(separator: "\n"))
+        print("Interop results: \(passed) passed, \(missing) skipped, \(manifest.fixtures.count - passed - missing) failed\n" + rows.joined(separator: "\n"))
     }
+
+    /// Fixtures that need an optional helper this machine doesn't have are skipped with the reason,
+    /// never reported as passed (a missing tool is not a defect in Zipper).
+    static func missingHelper(for fx: Manifest.Fixture, error: ArchiveError) -> String? {
+        if case .noEngineAvailable = error { return "no engine for this format is installed" }
+        if fx.format == "rar", !hasRarCodec { return "7-Zip's RAR codec is not installed (Linux: 7zip-rar)" }
+        if fx.format == "arc", HelperLocator.find(["nomarch"]) == nil { return "nomarch is not installed" }
+        return nil
+    }
+
+    /// Whether the installed 7-Zip can decode RAR (codec 40305, Rar5). Distribution builds of 7-Zip
+    /// often ship the RAR codec separately; the official macOS 7zz bundled with Zipper includes it.
+    static let hasRarCodec: Bool = {
+        guard let exe = HelperLocator.find(["7zz", "7z"]) else { return false }
+        let p = Process()
+        p.executableURL = exe
+        p.arguments = ["i"]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return false }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return String(decoding: data, as: UTF8.self).contains("40305")
+    }()
 
     func testLegacyFilenameEncodingOverride() throws {
         let url = Self.root.appendingPathComponent("zip/legacy-shiftjis.zip")
@@ -112,7 +143,7 @@ final class ForwardInteropTests: XCTestCase {
     }
 }
 
-/// Archives created by Universal Archiver must be readable by independent tools.
+/// Archives created by Zipper must be readable by independent tools.
 final class ReverseInteropTests: XCTestCase {
     let service = ArchiveService()
     var work: URL!

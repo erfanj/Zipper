@@ -17,7 +17,7 @@ public final class RarEngine: ArchiveEngine, @unchecked Sendable {
         descriptor = EngineDescriptor(
             id: .rar, name: "RAR (RARLAB)", implementation: "User-installed command-line tool (rar)",
             version: version, minimumVersion: "5.0", license: "Proprietary (RARLAB)",
-            licensingRestrictions: "Not bundled. Requires a copy of RAR installed and licensed by the user; Universal Archiver only invokes it.",
+            licensingRestrictions: "Not bundled. Requires a copy of RAR installed and licensed by the user; Zipper only invokes it.",
             isAvailable: executable != nil,
             unavailableReason: executable == nil ? "Install RAR from rarlab.com (or brew install --cask rar) to create RAR archives." : nil,
             location: executable?.path,

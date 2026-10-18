@@ -49,11 +49,22 @@ public final class OperationProgress: @unchecked Sendable {
     private var observers: [(ProgressSnapshot) -> Void] = []
     /// Minimum interval between observer callbacks.
     public var throttle: TimeInterval = 0.1
-    /// Child processes to terminate when cancelled.
-    private var cancelHandlers: [() -> Void] = []
-    private var pauseHandlers: [(Bool) -> Void] = []
+    /// Child processes to terminate when cancelled, keyed by registration token.
+    private var cancelHandlers: [Int: () -> Void] = [:]
+    private var pauseHandlers: [Int: (Bool) -> Void] = [:]
+    private var nextHandlerID = 0
+    /// Guarded by `pauseCondition` (it is what paused workers wait on).
     private var _paused = false
     private let pauseCondition = NSCondition()
+    /// Copy of the paused state guarded by `lock`, so snapshots never take both locks.
+    private var _pausedMirror = false
+    private var pausedSince: Date?
+    private var pausedTotal: TimeInterval = 0
+
+    /// Identifies a registered cancel or pause handler so its owner can remove just that handler.
+    public struct HandlerToken: Hashable, Sendable {
+        fileprivate let id: Int
+    }
 
     public init() {}
 
@@ -70,21 +81,52 @@ public final class OperationProgress: @unchecked Sendable {
         pauseCondition.lock(); _paused = false; pauseCondition.broadcast(); pauseCondition.unlock()
         lock.lock()
         _cancelled = true
-        let handlers = cancelHandlers
+        updatePauseClockLocked(paused: false)
+        let handlers = Array(cancelHandlers.values)
         lock.unlock()
         handlers.forEach { $0() }
     }
 
-    public func onCancel(_ handler: @escaping () -> Void) {
+    /// Runs `handler` when the operation is cancelled (immediately if it already was).
+    @discardableResult
+    public func onCancel(_ handler: @escaping () -> Void) -> HandlerToken {
         lock.lock()
         let already = _cancelled
-        if !already { cancelHandlers.append(handler) }
+        let token = makeTokenLocked()
+        if !already { cancelHandlers[token.id] = handler }
         lock.unlock()
         if already { handler() }
+        return token
     }
 
+    /// Removes handlers registered with `onCancel` or `onPauseChange`. Other owners' handlers stay.
+    public func removeHandlers(_ tokens: [HandlerToken]) {
+        lock.lock()
+        for t in tokens {
+            cancelHandlers[t.id] = nil
+            pauseHandlers[t.id] = nil
+        }
+        lock.unlock()
+    }
+
+    /// Removes every handler. Prefer `removeHandlers(_:)`, which leaves other owners' handlers alone.
     public func clearCancelHandlers() {
         lock.lock(); cancelHandlers.removeAll(); pauseHandlers.removeAll(); lock.unlock()
+    }
+
+    private func makeTokenLocked() -> HandlerToken {
+        nextHandlerID += 1
+        return HandlerToken(id: nextHandlerID)
+    }
+
+    private func updatePauseClockLocked(paused: Bool) {
+        _pausedMirror = paused
+        if paused {
+            if pausedSince == nil { pausedSince = Date() }
+        } else if let since = pausedSince {
+            pausedTotal += Date().timeIntervalSince(since)
+            pausedSince = nil
+        }
     }
 
     /// Throws `ArchiveError.cancelled` if cancellation was requested. While paused, blocks here, so
@@ -111,14 +153,19 @@ public final class OperationProgress: @unchecked Sendable {
         _paused = p
         pauseCondition.broadcast()
         pauseCondition.unlock()
-        lock.lock(); let handlers = pauseHandlers; lock.unlock()
+        lock.lock(); let handlers = Array(pauseHandlers.values); lock.unlock()
         handlers.forEach { $0(p) }
-        mutate { $0._phase = $0._phase }
+        mutate { $0.updatePauseClockLocked(paused: p) }
     }
 
     /// Registers a handler that is told when the operation is paused (true) or resumed (false).
-    public func onPauseChange(_ handler: @escaping (Bool) -> Void) {
-        lock.lock(); pauseHandlers.append(handler); lock.unlock()
+    @discardableResult
+    public func onPauseChange(_ handler: @escaping (Bool) -> Void) -> HandlerToken {
+        lock.lock()
+        let token = makeTokenLocked()
+        pauseHandlers[token.id] = handler
+        lock.unlock()
+        return token
     }
 
     public func setPhase(_ phase: String) { mutate { $0._phase = phase } }
@@ -140,11 +187,14 @@ public final class OperationProgress: @unchecked Sendable {
     public func flush() { mutate { _ in } }
 
     private func makeSnapshot() -> ProgressSnapshot {
-        let elapsed = Date().timeIntervalSince(start)
+        // Time spent paused is excluded, so throughput and the remaining-time estimate stay honest.
+        let now = Date()
+        let paused = pausedTotal + (pausedSince.map { now.timeIntervalSince($0) } ?? 0)
+        let elapsed = max(0, now.timeIntervalSince(start) - paused)
         return ProgressSnapshot(
             phase: _phase, currentItem: _currentItem, totalBytes: _totalBytes, processedBytes: _processed,
             outputBytes: _output, totalItems: _totalItems, processedItems: _items, elapsed: elapsed,
-            bytesPerSecond: elapsed > 0 ? Double(_processed) / elapsed : 0, warnings: _warnings, isPaused: _paused)
+            bytesPerSecond: elapsed > 0 ? Double(_processed) / elapsed : 0, warnings: _warnings, isPaused: _pausedMirror)
     }
 
     private func mutate(force: Bool = true, _ body: (OperationProgress) -> Void) {

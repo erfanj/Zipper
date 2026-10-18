@@ -30,7 +30,7 @@ public enum TestFS {
     /// A small tree with Unicode names in several scripts, nested folders, an empty folder and binary data.
     public static func sampleTree(in parent: URL, name: String = "Sample") -> URL {
         let root = parent.appendingPathComponent(name)
-        write(root, "readme.txt", String(repeating: "Universal Archiver test line.\n", count: 200))
+        write(root, "readme.txt", String(repeating: "Zipper test line.\n", count: 200))
         write(root, "docs/فارسی.txt", "سلام دنیا")
         write(root, "docs/العربية.txt", "مرحبا بالعالم")
         write(root, "docs/中文/文件.txt", "你好，世界")

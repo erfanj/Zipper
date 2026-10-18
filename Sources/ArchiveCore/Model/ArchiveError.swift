@@ -83,11 +83,11 @@ public enum ArchiveError: Error, Sendable, Equatable {
         case .fileNotFound(let p):
             return "“\(Self.name(p))” could not be found. It may have been moved, renamed or deleted."
         case .notAnArchive(let p):
-            return "“\(Self.name(p))” doesn't look like an archive Universal Archiver recognises."
+            return "“\(Self.name(p))” doesn't look like an archive \(ProductInfo.name) recognises."
         case .unsupportedFormat(let f):
             return "The \(f) format isn't supported."
         case .noEngineAvailable(let f, let op, let hint):
-            return "Universal Archiver recognises this \(FormatCatalog.descriptor(for: f)?.name ?? f.rawValue) file, but no installed engine can \(op) it." + (hint.map { " " + $0 } ?? "")
+            return "\(ProductInfo.name) recognises this \(FormatCatalog.descriptor(for: f)?.name ?? f.rawValue) file, but no installed engine can \(op) it." + (hint.map { " " + $0 } ?? "")
         case .engineUnavailable(let e, let reason):
             return "The \(e.rawValue) engine can't be used: \(reason)"
         case .operationNotSupported(let f, let op, let reason):
@@ -120,7 +120,7 @@ public enum ArchiveError: Error, Sendable, Equatable {
         case .insufficientSpace(let needed, let available):
             return "This needs about \(ByteFormatting.string(needed)) but only \(ByteFormatting.string(available)) is available."
         case .permissionDenied(let p):
-            return "Universal Archiver doesn't have permission to access “\(Self.name(p))”."
+            return "\(ProductInfo.name) doesn't have permission to access “\(Self.name(p))”."
         case .io(let p, _, let message):
             return "A read/write error occurred on “\(Self.name(p))”: \(message)"
         case .externalTool(let tool, _, let message):

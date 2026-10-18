@@ -1,7 +1,7 @@
 import Foundation
 import ArchiveCore
 
-/// The engines shipped with Universal Archiver, in default priority order.
+/// The engines shipped with Zipper, in default priority order.
 ///
 /// Priority rationale: libarchive is in-process, streaming and fast to start, so it is preferred for
 /// everything it supports. 7-Zip covers encryption, multi-volume creation and disk images. unar

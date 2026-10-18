@@ -169,28 +169,33 @@ extension ArchiveService {
         var stagingURL: URL?
         var stageReport: ExtractionReport?
         let req = EngineRequirements(operations: .extract)
-        let (_, engineID) = try withEngines(for: detection.format, req, notes: &notes) { engine -> Void in
-            let staging = parent.appendingPathComponent(".ua-extract-\(UUID().uuidString)", isDirectory: true)
-            try fm.createDirectory(at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
-            do {
-                var stageOptions = options
-                stageOptions.conflictPolicy = .keepBoth
-                let sink = try SafeExtractionSink(destination: staging, options: stageOptions, progress: progress)
+        let engineID: EngineID
+        do {
+            (_, engineID) = try withEngines(for: detection.format, req, notes: &notes) { engine -> Void in
+                let staging = parent.appendingPathComponent(".ua-extract-\(UUID().uuidString)", isDirectory: true)
+                try fm.createDirectory(at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
                 do {
-                    try engine.extract(source, selection: request.selection, into: sink, options: request.readOptions, progress: progress)
-                    try sink.finish()
+                    var stageOptions = options
+                    stageOptions.conflictPolicy = .keepBoth
+                    let sink = try SafeExtractionSink(destination: staging, options: stageOptions, progress: progress)
+                    do {
+                        try engine.extract(source, selection: request.selection, into: sink, options: request.readOptions, progress: progress)
+                        try sink.finish()
+                    } catch {
+                        sink.abortActive()
+                        throw error
+                    }
+                    var r = sink.report
+                    r.engine = engine.descriptor.name
+                    stageReport = r
+                    stagingURL = staging
                 } catch {
-                    sink.abortActive()
+                    try? fm.removeItem(at: staging)
                     throw error
                 }
-                var r = sink.report
-                r.engine = engine.descriptor.name
-                stageReport = r
-                stagingURL = staging
-            } catch {
-                try? fm.removeItem(at: staging)
-                throw error
             }
+        } catch let e as ArchiveError {
+            throw Self.reframeUnrecognised(e, detection: detection, url: request.archive)
         }
         guard let staging = stagingURL, var report = stageReport else { throw ArchiveError.internalError("extraction produced no result") }
         defer { try? fm.removeItem(at: staging) }
