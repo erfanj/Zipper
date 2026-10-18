@@ -1,6 +1,6 @@
 # Dependencies and licences (software bill of materials)
 
-Universal Archiver's own code is intended to be released under a licence chosen by the owner (none
+Zipper's own code is intended to be released under a licence chosen by the owner (none
 is applied yet). The table lists every third-party component, how it is used, and the obligations
 that follow. Versions are those pinned by `Scripts/build-deps-macos.sh` for the shipped app; the
 Linux test environment used the distribution packages noted in the last column.
@@ -28,7 +28,7 @@ Linux test environment used the distribution packages noted in the last column.
 * **7-Zip (LGPL-2.1)** is shipped unmodified as a separate executable, so the app is not a
   derivative work. Obligations: include the licence and notice, and offer the corresponding source
   (the exact upstream release is referenced and pinned). The unRAR licence inside 7-Zip forbids using
-  that code to re-create the RAR compression algorithm; Universal Archiver uses it only to extract.
+  that code to re-create the RAR compression algorithm; Zipper uses it only to extract.
 * **unar/XADMaster (LGPL-2.1)**: same approach — separate, unmodified executables with licence and
   source offer.
 * **GPL tools** (lrzip, lzop, nomarch) are never bundled; they are run as independent programs the
@@ -52,4 +52,4 @@ advisories before each release; notable history to be aware of:
 * The Linux development environment used older distribution packages (libarchive 3.7.2, 7-Zip
   23.01); those are for testing only and are not shipped.
 
-`archiver engines` prints the versions actually present at run time.
+`zipper engines` prints the versions actually present at run time.

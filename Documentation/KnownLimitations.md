@@ -2,20 +2,25 @@
 
 Honest list of what is not done, not verified, or not possible.
 
-## Not built or tested in this delivery
+## Not yet verified on a Mac
 
-* **The macOS app, Quick Look extension, Finder Services, App Intents, Keychain storage, Dock/menu-bar
-  progress, notifications, Apple Archive / AEA and hdiutil engines have not been compiled or run.**
-  This repository was developed in a Linux container without Xcode or macOS SDKs. The app sources
-  pass the Swift parser for a macOS target and were reviewed by hand, but type-checking and UI
-  testing require a Mac. Expect a short round of compile fixes on first build. Everything below the
-  app (core, engines, services, CLI) is built and tested.
+* **The app's SwiftUI/AppKit views, the Quick Look extension, Finder Quick Actions, Shortcuts,
+  Keychain storage, Dock progress, notifications, and the Apple Archive/AEA and hdiutil engines have
+  not been compiled on macOS yet.** This repository is developed in a Linux container, so what is
+  checked differs by layer:
+  * The core, engines, services and CLI are built and tested on Linux.
+  * The app's model layer (`Sources/ZipperMac/Model`: settings, the app model, the archive browser's
+    index, the compress/extract forms, the tools) is compiled and type-checked on Linux too.
+  * The views were reviewed by hand against the macOS 14 SDK.
+
+  The macOS CI job (`.github/workflows/ci.yml`) builds the app with Xcode and is the first real
+  check. Expect a few compile fixes the first time it runs.
 * **No Apple Silicon measurements.** Benchmarks were run on x86_64 Linux. The Apple-Silicon-specific
   logic (P/E core detection via `hw.perflevel*`, QoS mapping, Low Power Mode and thermal handling)
   is implemented but unmeasured.
-* **Not signed or notarized** (no Developer ID credentials).
-* **UI tests** (keyboard navigation, VoiceOver, drag and drop, light/dark mode) are not written; they
-  need XCUITest on macOS.
+* **Not signed or notarized yet.** That needs your Developer ID; see [Distribution.md](Distribution.md).
+* **UI tests** (keyboard navigation, VoiceOver, drag and drop, light/dark mode) aren't written yet.
+  They need XCUITest on macOS.
 
 ## Format limitations
 
@@ -26,7 +31,7 @@ Honest list of what is not done, not verified, or not possible.
 * Legacy Mac and Amiga formats rely on unar, which is not bundled by default and is unverified here.
 * ZIPX entries using WinZip's JPEG, WavPack or other proprietary methods cannot be decoded.
 * Classic spanned ZIP (`.z01…`) can be read but not created; split ZIPs are created as `.zip.001`
-  byte-split sets (readable by 7-Zip-compatible tools and by Universal Archiver).
+  byte-split sets (readable by 7-Zip-compatible tools and by Zipper).
 * WARC writing was withdrawn after it lost entries in testing; WARC reading remains.
 * Brotli streams have no magic number: `.br` files are recognised by extension only.
 * Encrypted archives handled by unar are not supported (its tools only accept passwords as
@@ -58,4 +63,4 @@ Honest list of what is not done, not verified, or not possible.
   encodings need the manual setting.
 * **GPU / Neural Engine**: not used. No compression or checksum workload here was shown to benefit;
   CPU paths (with zlib's and the codecs' own SIMD) are used throughout.
-* **Localization**: infrastructure only (String Catalog); English is the only language.
+* **Localization**: infrastructure only (String Catalog filled by Xcode at build time); English is the only language.

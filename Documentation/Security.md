@@ -1,6 +1,6 @@
 # Security architecture
 
-Archives are untrusted input. Universal Archiver is designed so that a malicious archive cannot
+Archives are untrusted input. Zipper is designed so that a malicious archive cannot
 write outside the folder the user chose, exhaust the disk or memory, create dangerous filesystem
 objects, or run code — and so that passwords and file names never leave the Mac.
 
@@ -28,7 +28,7 @@ them but keeps the disk reserve): 500 GB total, 256 GB per file, 2,000,000 entri
 after the first 1 GB, nesting depth 3, keep 512 MB free.
 
 Executable-content detection (apps, Mach-O/ELF/PE binaries, `#!` scripts, installer packages,
-executable bits) is a **warning aid only**. Universal Archiver does not scan for malware and never
+executable bits) is a **warning aid only**. Zipper does not scan for malware and never
 claims an archive is safe; a passing integrity test means the data decoded and checksums matched,
 nothing more.
 
@@ -47,10 +47,12 @@ nothing more.
   logged, never put in error messages, never passed as command-line arguments (helpers receive them
   on stdin in answer to their prompt, `hdiutil` via `-stdinpass`), and never written to settings or
   presets (preset JSON is tested to contain no secret fields).
-* The `archiver` CLI refuses `--password`; it reads from the terminal with echo off or from stdin.
-* Passwords can be saved in the macOS Keychain (generic passwords, this-device-only, optionally
-  requiring Touch ID / login password via `.userPresence`), removed individually, or not stored at
-  all. A password is associated with the whole multipart set.
+* The `zipper` CLI refuses `--password`; it reads from the terminal with echo off or from stdin.
+* Passwords can be saved in the macOS Keychain, removed individually, or not stored at all. They
+  are generic passwords in the login keychain, readable without a prompt only by Zipper.
+  "Require Touch ID or your login password" is checked with LocalAuthentication before the item is
+  read. The flag is stored with each item, so turning the setting off doesn't unlock existing
+  passwords. A password is associated with the whole multipart set.
 * Random passwords use the system CSPRNG (`SystemRandomNumberGenerator`); strength feedback is a
   local estimate.
 * Errors distinguish incorrect password, missing password, unsupported encryption, authentication
@@ -62,7 +64,7 @@ nothing more.
   "Extract Here", multipart sets and batch operations work in any folder without repeated prompts.
   Parsers run in-process (libarchive) or in separate helper processes (7-Zip, unar, zpaq, lrzip,
   lzop, nomarch, rar, hdiutil) with a minimal environment (`PATH=/usr/bin:/bin`, temporary `HOME`).
-* **Sandboxed configuration** (`Packaging/UniversalArchiver-AppStore.entitlements`): App Sandbox with
+* **Sandboxed configuration** (`Packaging/Zipper-AppStore.entitlements`): App Sandbox with
   user-selected read-write access and app-scoped bookmarks; helpers signed with
   `com.apple.security.inherit`. Sibling volumes of multipart sets rely on `NSIsRelatedItemType`;
   where that is insufficient the user is asked to choose the folder. This configuration has not

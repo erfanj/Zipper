@@ -38,7 +38,7 @@
       "isAvailable" : true,
       "isolation" : "Separate process; reads only the files selected for compression.",
       "license" : "Proprietary (RARLAB)",
-      "licensingRestrictions" : "Not bundled. Requires a copy of RAR installed and licensed by the user; Universal Archiver only invokes it.",
+      "licensingRestrictions" : "Not bundled. Requires a copy of RAR installed and licensed by the user; Zipper only invokes it.",
       "location" : "\/usr\/bin\/rar",
       "minimumVersion" : "5.0",
       "name" : "RAR (RARLAB)",
@@ -6435,5 +6435,5 @@
       "signatures" : 1
     }
   ],
-  "generatedBy" : "archiver formats --json"
+  "generatedBy" : "zipper formats --json"
 }

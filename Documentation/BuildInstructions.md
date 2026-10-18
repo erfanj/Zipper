@@ -1,82 +1,70 @@
 # Build instructions
 
+For the complete path to a signed, notarized release, see [Distribution.md](Distribution.md). This
+page is the developer quick reference.
+
 ## Requirements
 
-* macOS 14 Sonoma or later on Apple Silicon (Intel builds are possible with `--universal`).
-* Xcode 15.3 or later (Swift 5.10+); Xcode 16 recommended.
-* Optional: [XcodeGen](https://github.com/yonaskolb/XcodeGen) for the Xcode project (Quick Look
-  extension and Shortcuts metadata).
+* macOS 14 Sonoma or later, Apple silicon or Intel.
+* Xcode 16 or later (Swift 6 compiler; the code uses the Swift 5 language mode).
+* [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`.
 
-## 1. Dependencies (self-contained build)
+## The app (Xcode)
 
 ```sh
-Scripts/build-deps-macos.sh            # arm64; add --universal for arm64 + x86_64
+Scripts/build-deps-macos.sh            # once: pinned static libraries + 7-Zip helper → Vendor/macos
+xcodegen generate                      # creates Zipper.xcodeproj from project.yml
+open Zipper.xcodeproj                  # scheme "Zipper", My Mac, ⌘R
 ```
 
-This downloads pinned, SHA-256-verified sources of libarchive, XZ, Zstandard, LZ4 and Brotli,
-builds static libraries into `Vendor/macos`, and unpacks the official 7-Zip console build
-(`7zz`) as a helper. libarchive uses Apple's CommonCrypto for ZIP AES. Nothing from Homebrew ends up
-in the app.
+Debug builds are signed to run locally and need no certificate. Release builds (Product › Archive)
+use your Developer ID: set `DEVELOPMENT_TEAM` and `ZIPPER_BUNDLE_ID` in `project.yml` first.
 
-For quick development you can instead use Homebrew (`brew install libarchive brotli sevenzip`); the
-scripts pick it up automatically, but the resulting app then depends on Homebrew's libraries.
+**How the C libraries are found.** `Package.swift` uses the static XCFrameworks in
+`Vendor/macos/xcframeworks` when they exist, so Xcode needs no environment variables. Without them,
+it falls back to pkg-config system libraries: fine on Linux, but in Xcode on macOS that needs
+`PKG_CONFIG_PATH` set for Xcode itself. Run the deps script instead.
 
-Optional legacy-format helpers (not bundled by default): `brew install unar` (StuffIt, Compact Pro,
-ARC, Zoo, Amiga…), `brew install zpaq lrzip lzop`. To bundle unar/lsar, copy them into
-`Vendor/macos/helpers/` (LGPL — see Dependencies.md).
-
-## 2a. App with SwiftPM (no Xcode project)
+## The package and the command-line tool (SwiftPM)
 
 ```sh
-Scripts/build-app.sh                   # dist/Universal Archiver.app, ad-hoc signed
-Scripts/build-app.sh --universal       # arm64 + x86_64
-Scripts/build-app.sh --sign "Developer ID Application: Your Name (TEAMID)"
-```
-
-The bundle contains the app, the `archiver` CLI and `7zz` in `Contents/Helpers`, licence files, and
-is signed inside-out with the hardened runtime.
-
-## 2b. App with Xcode (includes Quick Look + Shortcuts)
-
-```sh
-brew install xcodegen
-xcodegen generate
-open UniversalArchiver.xcodeproj
-```
-
-Set your team in the project, then build the `UniversalArchiver` scheme. If you did not run
-`build-deps-macos.sh`, set `PKG_CONFIG_PATH` (e.g. in the scheme's environment or in Xcode's build
-settings) to Homebrew's `libarchive` and `brotli` `lib/pkgconfig` folders.
-
-## 3. Tests
-
-```sh
-swift test                                   # all suites
-UA_RUN_LARGE_TESTS=1 swift test              # adds the >4 GB ZIP64 test and larger stress cases
+swift build -c release --product zipper    # .build/release/zipper
+swift test                                 # all suites (helper-based tests skip when a tool is missing)
+UA_RUN_LARGE_TESTS=1 swift test            # adds the >4 GB ZIP64 test and larger stress cases
 UA_FUZZ_ITERATIONS=500 swift test --filter FuzzTests
-Scripts/make-interop-fixtures.sh             # (re)generate reference fixtures; needs the reference tools
 ```
 
-Interop and helper-engine tests are skipped (not failed) when a reference tool is missing. On macOS
-install them with Homebrew: `brew install sevenzip unar zstd lz4 brotli lzip xz rar` (RAR is
-proprietary; it is only used to create test fixtures and RAR archives).
+Reference tools for the interop and helper tests on macOS:
+`brew install sevenzip unar zstd lz4 brotli lzip xz rar`. RAR is proprietary; it's used only for
+fixtures and for creating RAR archives.
 
-## 4. Linux (core, engines, CLI and tests)
+`Scripts/build-app.sh` builds `dist/Zipper.app` with SwiftPM alone. It's quick for local testing,
+but it has no Quick Look extension or Shortcuts metadata.
 
-Everything except the app builds on Linux, which is how this repository was developed and tested:
+## Linux (core, engines, CLI, tests, and type-checking the app's model code)
 
 ```sh
-sudo apt install libarchive-dev libbrotli-dev liblzma-dev zlib1g-dev 7zip 7zip-rar unar
-swift build && swift test
+sudo apt install libarchive-dev libbrotli-dev liblzma-dev zlib1g-dev \
+  7zip 7zip-rar unar zip unzip lzip lzop zstd lz4 brotli lrzip zpaq nomarch
+swift build --build-tests && swift test --skip-build
 ```
 
-## 5. Benchmarks
+On Linux the `ZipperMac` target compiles the app's platform-neutral model layer (`Sources/ZipperMac/Model`)
+around a small stub. That type-checks every call the UI makes into the core, even without macOS.
 
-```sh
-swift build -c release --product archiver
-Scripts/benchmark.py --archiver .build/release/archiver --out Documentation/Benchmarks.md
-```
+## Continuous integration
 
-## 6. Distribution
+`.github/workflows/ci.yml` has two jobs:
 
-See [Distribution.md](Distribution.md) for signing, notarization, DMG packaging and updates.
+* **Linux**: builds and runs the full test suite on every push.
+* **macOS**: builds the dependencies, generates the Xcode project, builds the app, checks the
+  bundle's signature and layout, runs the package tests, and uploads a downloadable
+  `Zipper-debug-app`. Because macOS minutes cost 10× on private repositories, it runs on pull
+  requests, from the Actions tab, or for pushes whose commit message contains `[macos]`.
+
+## Regenerating assets
+
+* App icon: `python3 Scripts/make-icon.py` writes the asset catalog icon set and
+  `Packaging/AppIcon.icns`. It needs Pillow.
+* Interop fixtures: `Scripts/make-interop-fixtures.sh` (needs the reference tools).
+* Benchmarks: `Scripts/benchmark.py --archiver .build/release/zipper --out Documentation/Benchmarks.md`.

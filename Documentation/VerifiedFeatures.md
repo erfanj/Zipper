@@ -13,12 +13,12 @@ the build environment (macOS-only). Nothing here is claimed on the basis of code
 | 4 | AES-256 ZIP readable by an independent app | **Verified** — libarchive-written AES-256 ZIP decrypted by 7-Zip; wrong password rejected | `ReverseInteropTests.testAESZipDecryptedBy7Zip` |
 | 5 | Encrypted 7z hides file names | **Verified** — names absent from the file bytes (UTF-8 and UTF-16), listing fails without the password, reference 7-Zip reveals nothing | `SevenZipEngineTests.testEncrypted7zHidesFilenames` |
 | 6 | Multipart: create, extract, detect missing volumes | **Verified** | `testMultipartCreateExtractAndMissingVolume`, `testSplit7zReadBy7Zip`, `testMissingVolumeIsReportedBeforeExtraction`, multipart fixtures |
-| 7 | Preview images/documents without extracting everything | **Engine part verified** (single-entry extraction into a private read-only preview folder); Quick Look UI unverified | `testContentSearchAndPreview`; `PreviewPane`/`QuickLookView` (macOS) |
+| 7 | Preview images/documents without extracting everything | **Engine part verified** (single-entry extraction into a private read-only preview folder); Quick Look (Space) UI unverified | `testContentSearchAndPreview`; `ArchiveBrowserView.quickLook()` (macOS) |
 | 8 | Extract one file from thousands | **Verified** (1 of 2,000) | `testSelectiveExtraction` (libarchive and 7-Zip) |
 | 9 | Add, rename, remove entries; archive stays valid | **Verified** (add, delete, rename, move, new folder; encrypted ZIP keeps encryption; failed edits leave the original byte-identical) | `testTransactionalModification`, `testModifyEncryptedZipKeepsEncryption` |
 | 10 | ZIP → 7z conversion with content comparison | **Verified** (SHA-256 of every entry compared) | `testConversionZipTo7zVerifiesContent` |
 | 11 | Damaged archive gives an understandable error, no crash | **Verified** (malformed/truncated inputs; 1,650 fuzzed archives; double free found and fixed) | `testMalformedInputsFailCleanly`, `FuzzTests`, `testZipRepairRebuildsCentralDirectory` |
-| 12 | Finder integration | **Implemented, unverified** (NSServices Quick Actions; Quick Look extension) | `Integrations.swift`, `Info.plist`, `Integrations/QuickLook` |
+| 12 | Finder integration | **Implemented, unverified** (NSServices Quick Actions, enabled by default; Quick Look extension) | `App/ServicesProvider.swift`, `Info.plist`, `Integrations/QuickLook` |
 | 13 | Files larger than 4 GB | **Verified** (4.4 GB file, ZIP64, test + extraction + Info-ZIP `unzip -t`) | `testLargeFileOver4GBZip64` (`UA_RUN_LARGE_TESTS=1`) |
 | 14 | Unicode names (Persian, Arabic, Chinese, Japanese, Korean, Hindi, Cyrillic, accents, emoji) | **Verified** in every round-trip and interop test; legacy Shift-JIS/CP437 names decoded | sample tree in all engine tests; `testLegacyFilenameEncodingOverride` |
 | 15 | Malicious entries cannot escape the destination | **Verified** (traversal, absolute, backslash, symlink and hard-link escapes, planted symlinks, helper-engine output) | `MaliciousArchiveTests` (16 tests) |
@@ -26,11 +26,11 @@ the build environment (macOS-only). Nothing here is claimed on the basis of code
 | 17 | Safe cancellation | **Verified** (no partial or temporary output after cancelling compression or extraction; pause/resume completes correctly) | `testCancelledCompressionLeavesNoOutput`, `testCancelledExtractionLeavesNoPartialOutput`, `testPauseAndResumeCompletesCorrectly` |
 | 18 | Metadata preservation | **Verified** on Linux for permissions, modification times and symbolic links (TAR, read by GNU tar). macOS extended attributes, resource forks and quarantine propagation: implemented, unverified | `testMetadataPreservationInTar` |
 | 19 | ZIPs readable by built-in Windows and macOS tools | **Proxy verified**: Info-ZIP and Python read our ZIPs; only Store/Deflate are used by default; every non-ASCII name has the UTF-8 flag. Not run on Windows Explorer or Archive Utility | `testZipReadByInfoZipAndPython` |
-| 20 | Standalone app bundle | **Implemented, unverified** (`Scripts/build-app.sh`, `project.yml`) — requires a Mac | — |
+| 20 | Standalone app bundle | **Implemented, unverified** (`project.yml` + Xcode, or `Scripts/build-app.sh`); the macOS CI job builds and checks it | `.github/workflows/ci.yml` |
 
 ## Other verified capabilities
 
-* 77 of 77 reference-tool fixtures across 40+ format variants (see [SupportedFormats.md](SupportedFormats.md)).
+* 77 reference-tool fixtures across 40+ format variants (see [SupportedFormats.md](SupportedFormats.md)): all 67 committed fixtures pass; the 10 disk-image fixtures are regenerated locally by `Scripts/make-interop-fixtures.sh`.
 * Engine fallback with logged reasons (encrypted RAR5/7z, Deflate64, solid RAR3, ARC).
 * Smart extraction rules, five conflict policies, folder merging, batch extraction with skip/continue.
 * Bounded nested extraction; safety limits on size, count, ratio, depth and disk reserve.

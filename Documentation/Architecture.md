@@ -1,14 +1,14 @@
 # Architecture
 
-Universal Archiver is a Swift package with a strict layering: a platform-neutral core, a set of
-interchangeable engines, a service layer, and two front ends (the macOS app and the `archiver`
+Zipper is a Swift package with a strict layering: a platform-neutral core, a set of
+interchangeable engines, a service layer, and two front ends (the macOS app and the `zipper`
 CLI). Everything below the app builds and is tested on macOS and Linux.
 
 ```
-                     UNIVERSAL ARCHIVER
+                           ZIPPER
                             │
           ┌─────────────────┴──────────────────┐
-     macOS app (SwiftUI + AppKit)        archiver CLI / Shortcuts / Finder Services
+     macOS app (SwiftUI + AppKit)        zipper CLI / Shortcuts / Finder Services
           └─────────────────┬──────────────────┘
                             │
                   ArchiverKit (service façade)
@@ -32,13 +32,13 @@ CLI). Everything below the app builds and is tested on macOS and Linux.
 
 | Target | Responsibility |
 |---|---|
-| `CArchive`, `CZlib`, `CBrotli` | System-library shims (module maps) for libarchive, zlib and Brotli. |
-| `ArchiveCore` | The engine-agnostic model: `FormatID`/`FormatDescriptor`/`FormatCatalog` (97 formats), `FormatDetector`, `MultipartDetector`, the `ArchiveEngine` protocol and `EngineRegistry`, `SafeExtractionSink`, `SafetyLimits`, `SafePath`, `FileFilter`/`Glob`, `SourceCollector`, `StreamingHasher`, presets, the compression advisor, `ArchiveError`, `OperationProgress`, `Secret`. |
+| `CArchive`, `CLzma`, `CBrotli`, `CZlib` | The C libraries. On macOS, `Scripts/build-deps-macos.sh` packages pinned static builds as XCFrameworks that `Package.swift` uses as binary targets; elsewhere they are pkg-config system libraries. zlib always comes from the system. |
+| `ArchiveCore` | The engine-agnostic model: `FormatID`/`FormatDescriptor`/`FormatCatalog` (97 formats), `FormatDetector`, `MultipartDetector`, the `ArchiveEngine` protocol and `EngineRegistry`, `SafeExtractionSink`, `SafetyLimits`, `SafePath`, `FileFilter`/`Glob`, `SourceCollector`, `StreamingHasher`, presets, the compression advisor, `ArchiveError`, `OperationProgress`, `Secret`, `ProductInfo`. |
 | `ArchiveEngines` | Concrete engines: `LibArchiveEngine`, `SevenZipEngine`, `UnarEngine`, `RarEngine`, `ExternalToolsEngine`, and on macOS `AppleArchiveEngine` and `DiskImageEngine`. Also helper-process plumbing (`HelperProcess`, `HelperLocator`, `StagingDirectory`, `StagingImporter`). |
 | `ArchiverKit` | High-level operations with engine fallback, smart extraction, conversion, transactional editing, repair, tools, history, operation queue, password storage (Keychain), performance profile. |
-| `archiver` | Command-line companion. |
-| `UniversalArchiver` | The macOS SwiftUI app (a stub on other platforms). |
-| `Integrations/QuickLook` | Quick Look preview extension (built through the Xcode project). |
+| `ZipperCLI` | The `zipper` command-line tool. |
+| `ZipperMac` | The macOS SwiftUI app. `Model/` is platform-neutral and also compiles (and is unit-tested) on Linux; `Views/`, `App/` and `Platform/` are macOS-only. Release builds come from `project.yml`. |
+| `Integrations/QuickLook` | The Quick Look preview extension (built through the Xcode project). |
 
 ## Key design decisions
 
@@ -113,10 +113,49 @@ derived from the performance mode and the machine (`SystemProfile`: P/E core cou
 ### Passwords
 
 Passwords are `Secret` byte buffers zeroed on release. Engines ask a `PasswordProvider` only when an
-archive needs one; the app's provider checks the Keychain, then shows a sheet (the worker thread
-waits on a semaphore; the main thread is never blocked). Helper tools receive passwords on stdin in
-answer to their prompt, never as arguments. `CachingPasswordProvider` reuses a password across a
-multipart set or batch.
+archive needs one. The app's provider checks the Keychain first, then asks the user: the worker
+thread waits on a per-request `AnswerBox`, and the main thread is never blocked. Helper tools
+receive passwords on stdin in answer to their prompt, never as arguments. `CachingPasswordProvider`
+reuses a password across a multipart set or a batch.
+
+Saved passwords are generic-password items in the login keychain, which only Zipper can read
+without asking. "Require Touch ID or your login password" is enforced with LocalAuthentication
+before the item is read. Keychain access-control flags would need the data-protection keychain,
+and a Developer ID app only gets that with a provisioning profile.
+
+## The app
+
+**One main window, three places.** The sidebar holds Home, the open archives and Activity, and
+nothing else. Occasional utilities (test, repair, convert, batch, checksums, split/join, compare,
+duplicates) live in a separate **Tools** window, also reachable from the menu bar and the toolbar.
+Preferences are in the standard **Settings** window. Creating and extracting are focused
+**sheets** with one default button. Every operation runs in the background and shows up in
+**Activity**, in the toolbar and on the Dock tile. This keeps the first screen down to the three
+things people come to do: compress, extract, look inside.
+
+**Model / view split.** All state and rules live in `@Observable` classes under
+`Sources/ZipperMac/Model`:
+
+* `AppModel`: navigation, open archives, settings, prompts and running operations;
+* `BrowserState` and `FolderIndex`: an archive's folder tree, built once off the main thread with
+  collision-free row IDs, and cached sorted rows;
+* `CompressForm` and `ExtractForm`: what's valid, what gets scanned, what request is sent;
+* the tool models.
+
+Views only bind to them and call them. The model reaches the system through `PlatformServices`
+(implemented by `MacPlatform` with AppKit), so it builds and is unit-tested on Linux. That's how
+this repository type-checks every call the UI makes into the core without a Mac.
+
+**Prompts from background work.** Password and "item already exists" prompts are native
+`NSAlert`s. They're queued so they appear one at a time, whichever operation asked, and they don't
+depend on which SwiftUI sheet happens to be open. Each request gets its own answer box, so two
+concurrent operations can never receive each other's answers.
+
+**Running work.** `AppModel.run` enqueues on `OperationCenter`, which installs its completion
+handler *before* the work starts, so even an instant failure is reported. Each operation holds a
+`ProcessInfo` activity: App Nap can't throttle a long extraction in a hidden window, and the
+system won't terminate the app mid-write. Quitting with work in progress asks first, cancels, and
+waits briefly for partial output to be removed.
 
 ## Extending: adding a format provider
 

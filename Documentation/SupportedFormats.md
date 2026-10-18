@@ -5,7 +5,7 @@ Recognising a format is not the same as supporting it. This page states, per for
 and what is **not supported**, with the reason.
 
 * **Verified** — an automated test opens archives produced by an *independent* reference tool and
-  extracts byte-identical files (forward interop), and/or archives created by Universal Archiver are
+  extracts byte-identical files (forward interop), and/or archives created by Zipper are
   read correctly by an independent tool (reverse interop). Test runs were made on Linux (x86_64)
   with the engines listed in [Dependencies.md](Dependencies.md); see [Testing.md](Testing.md).
 * **Implemented** — the code path exists and is wired to an engine, but no fixture for that format
@@ -14,7 +14,7 @@ and what is **not supported**, with the reason.
 
 The machine-readable capability matrix (what each engine declares for each of the 97 catalogued
 formats) is [FormatCapabilities.json](FormatCapabilities.json), generated with
-`archiver formats --json` on the Linux build machine. It marks each engine as available or not,
+`zipper formats --json` on the Linux build machine. It marks each engine as available or not,
 and it does not include the macOS-only Apple Archive and disk-image engines. At run time the app shows the same matrix for the engines actually
 installed (Settings › Advanced).
 

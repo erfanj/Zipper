@@ -31,7 +31,8 @@ and libraries.
 | | FuzzTests | 1 | Mutated archives (bit flips, byte overwrites, header/trailer corruption, truncation, splicing) of ZIP, 7z, TAR, tar.gz/bz2/xz/zst/lz4/br, cpio and gzip through listing, testing and extraction: no crash, hang or file outside the destination. `UA_FUZZ_ITERATIONS` (default 60 per format) scales it |
 | InteropTests | ForwardInteropTests | 2 | 77 fixtures made by reference tools (Info-ZIP, 7-Zip, RAR 7, WinRAR-made RAR 2/3 corpus, GNU tar, bsdtar, gzip/bzip2/xz/zstd/lz4/lzip/lzop/brotli, cpio, ar, ISO, LHA, ARC, ZPAQ, lrzip, uuencode, …) listed and extracted with byte comparison; legacy Shift-JIS/CP437 name decoding |
 | | ReverseInteropTests | 8 | Our output read by independent tools: Info-ZIP + Python `zipfile`, 7-Zip (AES ZIP, 7z, split 7z), GNU tar, reference stream decoders, OCF rules for EPUB, metadata preserved for GNU tar |
-| **Total** | | **108** | |
+| ZipperMacTests | FolderIndexTests, FormTests, SettingsTests | 13 | The app's model layer: the archive browser's folder index (implicit folders, unique row IDs, folders first, whole-archive search), Compress/Extract form rules (password confirmation, split sizes with encryption, single-file streams, dropping settings a format can't use, rescans only when the file set changes), tolerant settings decoding |
+| **Total** | | **121** | |
 
 `Tests/UATestSupport` holds shared helpers: temporary directories, the Unicode sample tree (Persian,
 Arabic, Chinese, Japanese, Korean, Hindi, Cyrillic, accents, emoji, deep paths, empty folders,
@@ -49,34 +50,25 @@ symlinks), tree comparison and a process runner.
 
 ## Last results
 
-Recorded from the run described in [VerifiedFeatures.md](VerifiedFeatures.md) (Linux x86_64,
-Swift 6.1.3, libarchive 3.7.x system package, 7-Zip 23.01 + RAR plugin, RAR 7.00):
+Run on 2026-10-18 in this repository's Linux container (Ubuntu 24.04, x86_64, Swift 6.1.3,
+libarchive 3.7.2, 7-Zip 23.01 with its RAR codec, unar 1.10, lrzip, zpaq) with
+`swift test --skip-build`:
 
-Run on 2026-10-09 at commit "Fix use-after-free on cancelled compression…" with
-`UA_RUN_LARGE_TESTS=1 swift test --skip-build`:
-
-* **108 tests executed, 0 failures, 0 skipped**, in 373 s. All reference tools were installed, so
-  nothing was skipped.
-* `ForwardInteropTests.testAllReferenceFixtures`: 77 of 77 fixtures.
-* `CompressionServiceTests.testLargeFileOver4GBZip64`: 4.4 GB file, 66 s.
-* `StressTests.testStreamingKeepsMemoryBounded` with the large variant: 24 s.
-* `FuzzTests`, default 60 iterations × 11 formats = 660 mutated archives: no crash or escape.
-  Outcomes: 335 damaged, 167 still readable, 92 truncated, 40 checksum mismatches, 14 not
-  recognised, 12 rejected by an external tool.
-* `FuzzTests` again with `UA_FUZZ_ITERATIONS=150`, i.e. 1,650 archives: passed in 236 s. Outcomes:
-  816 damaged, 426 readable, 236 truncated, 98 checksum mismatches, 40 external tool, 33 not
-  recognised, 1 safety limit.
-
-The previous full run crashed in `StressTests.testCancelledCompressionLeavesNoOutput`. That was a
-real use-after-free in the libarchive writer's cancel path, now fixed, and the test was extended
-to assert that cancellation is prompt. See the commit history for details.
+* **121 tests executed, 0 failures, 1 skipped.** The skip is the >4 GB ZIP64 test, which needs
+  `UA_RUN_LARGE_TESTS=1`.
+* `ForwardInteropTests.testAllReferenceFixtures`: 67 passed, 0 failed, 10 skipped. The skipped ones
+  are the disk-image fixtures, which are git-ignored and recreated by
+  `Scripts/make-interop-fixtures.sh`.
+* Earlier full runs with `UA_RUN_LARGE_TESTS=1` (4.4 GB ZIP64 in 66 s; 2 GB streaming with flat
+  memory) and `UA_FUZZ_ITERATIONS=150` (1,650 mutated archives, no crash or escape) are recorded in
+  the git history of this file.
 
 ## Not covered by automated tests
 
-* **The SwiftUI app, Quick Look extension, Finder Services, App Intents** — no XCUITest suite exists;
-  these targets were not compiled in the Linux build environment (see
+* **The SwiftUI views, Quick Look extension, Finder Services, App Intents**: there's no XCUITest
+  suite yet. The views are compiled by the macOS CI job, not here (see
   [KnownLimitations.md](KnownLimitations.md)). Keyboard navigation, VoiceOver, drag and drop, and
-  light/dark mode are therefore unverified.
+  light/dark mode are therefore unverified. The app's model layer *is* covered (`ZipperMacTests`).
 * **macOS-only engines and services** — Apple Archive / AEA, `hdiutil` disk images, Keychain,
   extended attributes, resource forks, quarantine propagation, iCloud placeholders, P/E-core
   scheduling and thermal handling.
