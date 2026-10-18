@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # The fuzz test spawns helper tools for each mutated archive; 20 iterations (220 archives) keep CI
+  # under a few minutes. Run locally with UA_FUZZ_ITERATIONS=150 for the full sweep.
+  UA_FUZZ_ITERATIONS: "20"
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -31,6 +36,7 @@ jobs:
       - name: Build
         run: swift build --build-tests
       - name: Test
+        timeout-minutes: 20   # the suite takes ~3 minutes; fail fast (with a readable log) if anything hangs
         run: swift test --skip-build
 
   macos:
@@ -53,6 +59,15 @@ jobs:
       - name: Build pinned dependencies
         if: steps.vendor.outputs.cache-hit != 'true'
         run: Scripts/build-deps-macos.sh
+      - name: Cache build products (incremental rebuilds on later runs)
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/DerivedData
+            .build
+          key: build-${{ runner.os }}-${{ hashFiles('Package.swift', 'Package.resolved', 'project.yml') }}-${{ github.sha }}
+          restore-keys: |
+            build-${{ runner.os }}-${{ hashFiles('Package.swift', 'Package.resolved', 'project.yml') }}-
       - name: Generate the Xcode project
         run: |
           brew install xcodegen
@@ -82,6 +97,7 @@ jobs:
           path: Zipper-debug.zip
           retention-days: 7
       - name: Build and test the package (macOS engines, Keychain, Apple Archive)
+        timeout-minutes: 25
         run: |
           swift build --build-tests
           swift test --skip-build
