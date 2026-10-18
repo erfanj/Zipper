@@ -28,25 +28,30 @@ struct ArchiveBrowserView: View {
         let session: ExternalEditSession
     }
 
+    // The modifiers are split into two stages (window chrome, then dialogs) with named bindings:
+    // one long chain of closure-heavy modifiers is more than the type checker handles in time.
     var body: some View {
+        dialogs(on: chrome(on: content))
+    }
+
+    private func chrome<V: View>(on view: V) -> some View {
         @Bindable var model = model
-        content
+        return view
             .navigationTitle(state.displayName)
             .navigationSubtitle(subtitle)
             .searchable(text: $state.searchText, placement: .toolbar, prompt: "Search in archive")
             .toolbar { toolbar }
-            .inspector(isPresented: $model.showInspector) {
-                ArchiveInspector(state: state)
-                    .inspectorColumnWidth(min: 240, ideal: 280, max: 400)
-            }
+            .inspector(isPresented: $model.showInspector) { inspector }
             .quickLookPreview($quickLookURL)
-            .dropDestination(for: URL.self) { urls, _ in
-                guard state.isEditable, !urls.isEmpty else { return false }
-                pendingAdd = urls
-                return true
-            }
-            .confirmationDialog(addTitle, isPresented: Binding(get: { !pendingAdd.isEmpty }, set: { if !$0 { pendingAdd = [] } })) {
-                Button("Add") { model.add(pendingAdd, to: state); pendingAdd = [] }
+            .dropDestination(for: URL.self, action: acceptDrop)
+            .sheet(isPresented: $showAnalysis) { analysis }
+            .onChange(of: state.pendingCommand) { _, command in run(command) }
+    }
+
+    private func dialogs<V: View>(on view: V) -> some View {
+        view
+            .confirmationDialog(addTitle, isPresented: addPresented) {
+                Button("Add") { confirmAdd() }
                 Button("Cancel", role: .cancel) { pendingAdd = [] }
             } message: {
                 Text("The archive is rebuilt and checked before the original is replaced.")
@@ -57,12 +62,9 @@ struct ArchiveBrowserView: View {
             } message: {
                 Text("The archive is rebuilt without them and checked before the original is replaced. This can't be undone.")
             }
-            .alert("Rename", isPresented: Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })) {
+            .alert("Rename", isPresented: renamePresented) {
                 TextField("Name", text: $newName)
-                Button("Rename") {
-                    if let r = renameTarget { model.rename(r, to: newName, in: state) }
-                    renameTarget = nil
-                }
+                Button("Rename") { confirmRename() }
                 Button("Cancel", role: .cancel) { renameTarget = nil }
             } message: {
                 Text("Enter a new name for “\(renameTarget?.name ?? "")”.")
@@ -72,21 +74,54 @@ struct ArchiveBrowserView: View {
                 Button("Create") { model.createFolder(named: newFolderName, in: state) }
                 Button("Cancel", role: .cancel) {}
             }
-            .alert(item: $changedSession) { prompt in
-                let name = (prompt.session.entryPath as NSString).lastPathComponent
-                return Alert(title: Text("Update “\(name)” in the archive?"),
-                             message: Text("You changed “\(name)”. The archive is rebuilt and checked before the original is replaced."),
-                             primaryButton: .default(Text("Update Archive")) { model.commit(prompt.session, in: state) },
-                             secondaryButton: .cancel(Text("Not Now")))
-            }
-            .sheet(isPresented: $showAnalysis) {
-                if let listing = state.opened?.listing { AnalysisView(listing: listing) }
-            }
-            .onChange(of: state.pendingCommand) { _, command in
-                guard let command else { return }
-                state.pendingCommand = nil
-                perform(command)
-            }
+            .alert(item: $changedSession, content: updatePrompt)
+    }
+
+    private var inspector: some View {
+        ArchiveInspector(state: state)
+            .inspectorColumnWidth(min: 240, ideal: 280, max: 400)
+    }
+
+    @ViewBuilder private var analysis: some View {
+        if let listing = state.opened?.listing { AnalysisView(listing: listing) }
+    }
+
+    private var addPresented: Binding<Bool> {
+        Binding(get: { !pendingAdd.isEmpty }, set: { if !$0 { pendingAdd = [] } })
+    }
+
+    private var renamePresented: Binding<Bool> {
+        Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })
+    }
+
+    private func acceptDrop(_ urls: [URL], _ location: CGPoint) -> Bool {
+        guard state.isEditable, !urls.isEmpty else { return false }
+        pendingAdd = urls
+        return true
+    }
+
+    private func confirmAdd() {
+        model.add(pendingAdd, to: state)
+        pendingAdd = []
+    }
+
+    private func confirmRename() {
+        if let r = renameTarget { model.rename(r, to: newName, in: state) }
+        renameTarget = nil
+    }
+
+    private func run(_ command: BrowserCommand?) {
+        guard let command else { return }
+        state.pendingCommand = nil
+        perform(command)
+    }
+
+    private func updatePrompt(_ prompt: EditPrompt) -> Alert {
+        let name = (prompt.session.entryPath as NSString).lastPathComponent
+        return Alert(title: Text("Update “\(name)” in the archive?"),
+                     message: Text("You changed “\(name)”. The archive is rebuilt and checked before the original is replaced."),
+                     primaryButton: .default(Text("Update Archive")) { model.commit(prompt.session, in: state) },
+                     secondaryButton: .cancel(Text("Not Now")))
     }
 
     // MARK: Content
