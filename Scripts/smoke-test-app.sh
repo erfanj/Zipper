@@ -11,6 +11,7 @@
 #   Scripts/smoke-test-app.sh [dist/Zipper.app]
 set -euo pipefail
 APP="${1:-dist/Zipper.app}"
+APP="$(cd "$(dirname "$APP")" && pwd)/$(basename "$APP")"   # `open -a` needs an absolute path
 SHOTS="${SCREENSHOT_DIR:-dist/screenshots}"
 CLI="$APP/Contents/Helpers/zipper"
 BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$APP/Contents/Info.plist")
@@ -78,6 +79,8 @@ died() {
 }
 sleep 8
 alive || died "quit right after launch"
+open -a "$APP"   # bring it to the front, as a Finder launch would
+sleep 2
 shot home
 
 ditto -c -k --norsrc --noextattr --keepParent "$WORK/Sample" "$WORK/Sample.zip"
