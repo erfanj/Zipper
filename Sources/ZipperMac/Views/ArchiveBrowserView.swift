@@ -2,6 +2,7 @@
 import SwiftUI
 import AppKit
 import Charts
+import QuickLook  // with SwiftUI, provides .quickLookPreview
 import UniformTypeIdentifiers
 import ArchiveCore
 import ArchiveEngines
