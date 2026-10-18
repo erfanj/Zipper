@@ -208,7 +208,9 @@ extension ArchiveService {
         let base = Self.baseName(for: request.archive)
 
         switch request.mode {
-        case .newFolder, .smart where top.count != 1:
+        case .newFolder:
+            fallthrough
+        case .smart where top.count != 1:
             let folder = Self.uniqueURL(in: parent, name: base, isDirectory: true)
             try fm.moveItem(at: staging, to: folder)
             created = [folder]

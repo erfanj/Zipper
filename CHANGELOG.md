@@ -115,7 +115,9 @@
 * **First macOS build:** CI now builds the app with Xcode 16.4, then checks the signature, the
   embedded helpers and the Quick Look extension, and uploads the app. Two compile fixes came out of
   the first run: the archive browser's modifier chain was too long for the type checker in
-  reasonable time, and `.quickLookPreview` needs `import QuickLook`.
+  reasonable time, and `.quickLookPreview` needs `import QuickLook`. The build's warnings are fixed
+  too, including an allocation check in the libarchive writer that could never fail (the pointer
+  was declared doubly optional).
 * **Scripts and CI:** `build-app.sh` left `$(…)` placeholders in Info.plist. `notarize.sh`
   notarizes and staples apps and DMGs and prints Apple's log on rejection. `make-dmg.sh` takes the
   exported app. Added `Packaging/ExportOptions.plist` and a CI workflow (Linux tests; macOS app
@@ -123,7 +125,7 @@
 
 ### Tests
 
-* Added `ZipperMacTests`, 13 tests for the app's model layer. It now compiles on Linux, so the
+* Added `ZipperMacTests`, 14 tests for the app's model layer. It now compiles on Linux, so the
   type-checker covers every call the UI makes into the core.
 * The interop test skips fixtures whose optional helper isn't installed (as documented) instead of
   failing.

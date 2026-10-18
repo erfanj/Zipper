@@ -53,15 +53,19 @@ symlinks), tree comparison and a process runner.
 
 ## Last results
 
-Run on 2026-10-18 in this repository's Linux container (Ubuntu 24.04, x86_64, Swift 6.1.3,
-libarchive 3.7.2, 7-Zip 23.01 with its RAR codec, unar 1.10, lrzip, zpaq) with
-`swift test --skip-build`:
+On 2026-10-18, 125 tests:
 
-* **121 tests executed, 0 failures, 1 skipped.** The skip is the >4 GB ZIP64 test, which needs
-  `UA_RUN_LARGE_TESTS=1`.
-* `ForwardInteropTests.testAllReferenceFixtures`: 67 passed, 0 failed, 10 skipped. The skipped ones
-  are the disk-image fixtures, which are git-ignored and recreated by
-  `Scripts/make-interop-fixtures.sh`.
+| Where | Libraries and tools | Result |
+|---|---|---|
+| macOS 15, Apple silicon (CI, Xcode 16.4) | bundled libarchive 3.8.9 and 7-Zip 26.04 | **0 failures**, 3 skipped. Interop: 63 passed, 0 failed, 14 skipped |
+| Ubuntu 24.04, x86_64 (CI, Swift 6.1) | libarchive 3.7.2, 7-Zip 23.01 with its RAR codec, unar, lrzip, zpaq | **0 failures**, 3 skipped. Interop: 67 passed, 0 failed, 10 skipped |
+| Ubuntu 24.04, local | libarchive 3.7.2 with 7-Zip 26.04 (Linux build) as engine and reference | **0 failures**, 3 skipped |
+
+* The 3 skipped tests are expected: the >4 GB ZIP64 test, which needs `UA_RUN_LARGE_TESTS=1`, and
+  two tests that need RARLAB's licensed `rar`.
+* Interop skips: the disk-image fixtures (git-ignored, recreated by
+  `Scripts/make-interop-fixtures.sh`). On macOS also ARC, ZPAQ, lrzip and lzop, whose optional
+  tools the runner doesn't have.
 * Earlier full runs with `UA_RUN_LARGE_TESTS=1` (4.4 GB ZIP64 in 66 s; 2 GB streaming with flat
   memory) and `UA_FUZZ_ITERATIONS=150` (1,650 mutated archives, no crash or escape) are recorded in
   the git history of this file.

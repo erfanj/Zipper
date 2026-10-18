@@ -94,8 +94,8 @@ Things to try on the first run:
 Package tests (core, engines, services, CLI) run from Terminal:
 
 ```sh
-brew install sevenzip unar zstd lz4 brotli lzip xz      # reference tools; tests needing others are skipped
-swift test
+brew install unar zstd lz4 brotli lzip xz      # reference tools; tests needing others are skipped
+UA_HELPERS_DIR=$PWD/Vendor/macos/helpers swift test   # the bundled 7-Zip is the engine and the reference
 ```
 
 ## 5. Set the version

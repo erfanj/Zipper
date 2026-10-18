@@ -26,7 +26,7 @@ the build environment (macOS-only). Nothing here is claimed on the basis of code
 | 17 | Safe cancellation | **Verified** (no partial or temporary output after cancelling compression or extraction; pause/resume completes correctly) | `testCancelledCompressionLeavesNoOutput`, `testCancelledExtractionLeavesNoPartialOutput`, `testPauseAndResumeCompletesCorrectly` |
 | 18 | Metadata preservation | **Verified** on Linux for permissions, modification times and symbolic links (TAR, read by GNU tar). macOS extended attributes, resource forks and quarantine propagation: implemented, unverified | `testMetadataPreservationInTar` |
 | 19 | ZIPs readable by built-in Windows and macOS tools | **Proxy verified**: Info-ZIP and Python read our ZIPs; only Store/Deflate are used by default; every non-ASCII name has the UTF-8 flag. Not run on Windows Explorer or Archive Utility | `testZipReadByInfoZipAndPython` |
-| 20 | Standalone app bundle | **Implemented, unverified** (`project.yml` + Xcode, or `Scripts/build-app.sh`); the macOS CI job builds and checks it | `.github/workflows/ci.yml` |
+| 20 | Standalone app bundle | **Verified by CI**: the macOS job (Xcode 16.4, macOS 15) builds `Zipper.app` with the Quick Look extension and embedded `zipper` and `7zz`, runs `codesign --verify --deep --strict`, runs the embedded `zipper --version` and lints Info.plist. Developer ID signing and notarization need your certificate | `.github/workflows/ci.yml` |
 
 ## Other verified capabilities
 

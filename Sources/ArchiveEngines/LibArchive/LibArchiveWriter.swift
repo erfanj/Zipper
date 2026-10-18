@@ -40,7 +40,8 @@ final class LibArchiveWriter {
                 // After archive_write_fail nothing is written any more, but freeing still waits for
                 // in-flight multithreaded encoder jobs (zstd at high levels: seconds). Let the
                 // cancellation or error return now and release the encoder in the background.
-                DispatchQueue.global(qos: .utility).async { withExtendedLifetime(context) { _ = archive_write_free(a) } }
+                let handle = WriteHandle(a: a, context: context)
+                DispatchQueue.global(qos: .utility).async { withExtendedLifetime(handle.context) { _ = archive_write_free(handle.a) } }
             } else {
                 withExtendedLifetime(context) { _ = archive_write_free(a) }
             }
@@ -267,7 +268,8 @@ final class LibArchiveWriter {
         for (n, item) in items.enumerated() {
             try progress.checkCancelled()
             progress.setCurrentItem(item.archivePath)
-            guard var entry: OpaquePointer? = archive_entry_new() else { throw ArchiveError.internalError("allocation failed") }
+            guard let newEntry = archive_entry_new() else { throw ArchiveError.internalError("allocation failed") }
+            var entry: OpaquePointer? = newEntry  // optional: archive_entry_linkify may take or replace it
             defer { if let e = entry { archive_entry_free(e) } }
             archive_entry_copy_sourcepath(entry, item.url.path)
             let rc = archive_read_disk_entry_from_file(disk, entry, -1, nil)
@@ -358,4 +360,10 @@ final class LibArchiveWriter {
             progress.add(processed: UInt64(n))
         }
     }
+}
+
+/// Hands a finished writer to a background queue for freeing. Nothing else uses it after that.
+private struct WriteHandle: @unchecked Sendable {
+    let a: OpaquePointer
+    let context: LAOutput?
 }
