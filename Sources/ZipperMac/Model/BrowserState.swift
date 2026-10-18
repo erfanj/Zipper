@@ -195,9 +195,27 @@ final class BrowserState: Identifiable {
             }
             isLoading = false
             switch r {
-            case .success(let (o, idx)): show(o, index: idx)
-            case .failure(let e): error = e
+            case .success(let (o, idx)):
+                show(o, index: idx)
+                Self.reportForSmokeTest("opened \(u.lastPathComponent) \(o.listing.fileCount)")
+            case .failure(let e):
+                error = e
+                Self.reportForSmokeTest("failed \(u.lastPathComponent) \(e.code)")
             }
+        }
+    }
+
+    /// Scripts/smoke-test-app.sh sets ZIPPER_SMOKE_REPORT to learn whether opening an archive really
+    /// worked (the browser shows failures inline, so a running process alone proves nothing).
+    static func reportForSmokeTest(_ line: String) {
+        guard let path = ProcessInfo.processInfo.environment["ZIPPER_SMOKE_REPORT"], !path.isEmpty else { return }
+        let data = Data((line + "\n").utf8)
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            _ = FileManager.default.createFile(atPath: path, contents: data)
         }
     }
 

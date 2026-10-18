@@ -6,7 +6,8 @@
 #       xcrun notarytool store-credentials "ZIPPER_NOTARY" --apple-id you@example.com --team-id TEAMID
 #     (NOTARY_PROFILE selects another profile name), or
 #   * an App Store Connect API key, as CI uses: NOTARY_KEY_PATH (the AuthKey_….p8 file),
-#     NOTARY_KEY_ID, and NOTARY_ISSUER (omit it for an individual key).
+#     NOTARY_KEY_ID and NOTARY_ISSUER. Use a team key: individual keys (no issuer) need the
+#     notarytool in Xcode 26 or later.
 #
 #   Scripts/notarize.sh dist/Zipper.app          # zips, submits, staples the app itself
 #   Scripts/notarize.sh dist/Zipper-1.0.0.dmg    # submits and staples the disk image
@@ -17,7 +18,12 @@ set -euo pipefail
 TARGET="${1:?Usage: Scripts/notarize.sh dist/Zipper.app | dist/Zipper-<version>.dmg}"
 if [[ -n "${NOTARY_KEY_PATH:-}" ]]; then
   AUTH=(--key "$NOTARY_KEY_PATH" --key-id "${NOTARY_KEY_ID:?NOTARY_KEY_ID is required with NOTARY_KEY_PATH}")
-  [[ -n "${NOTARY_ISSUER:-}" ]] && AUTH+=(--issuer "$NOTARY_ISSUER")
+  if [[ -n "${NOTARY_ISSUER:-}" ]]; then
+    AUTH+=(--issuer "$NOTARY_ISSUER")
+  elif (( $(xcodebuild -version | awk 'NR==1 { print int($2) }') < 26 )); then
+    echo "NOTARY_ISSUER is required: this Xcode's notarytool only accepts team API keys (individual keys need Xcode 26)." >&2
+    exit 2
+  fi
 else
   AUTH=(--keychain-profile "${NOTARY_PROFILE:-ZIPPER_NOTARY}")
 fi
@@ -33,7 +39,12 @@ if ! grep -q "status: Accepted" <<<"$OUT"; then
   [[ -n "$ID" ]] && xcrun notarytool log "$ID" "${AUTH[@]}" >&2
   exit 1
 fi
-xcrun stapler staple "$TARGET"
+# The ticket can take a moment to become available after "Accepted"; retry before giving up.
+for attempt in 1 2 3 4 5; do
+  xcrun stapler staple "$TARGET" && break
+  [[ $attempt == 5 ]] && { echo "Stapling failed although notarization was accepted." >&2; exit 1; }
+  sleep $((attempt * 15))
+done
 xcrun stapler validate "$TARGET"
 if [[ "$TARGET" == *.app ]]; then
   spctl --assess --type execute --verbose "$TARGET"

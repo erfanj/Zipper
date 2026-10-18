@@ -33,10 +33,12 @@ step() { printf '\n==> %s\n' "$*"; }
 fail() { echo "error: $*" >&2; exit 1; }
 mkdir -p build dist
 
-# 1. Universal dependencies (rebuilt only when missing or single-architecture).
+# 1. Universal dependencies, rebuilt unless Vendor/macos holds a complete universal build made by
+#    the current Scripts/build-deps-macos.sh (so a version bump there is never shipped stale).
 step "Dependencies"
+WANT="$(shasum -a 256 Scripts/build-deps-macos.sh | cut -d' ' -f1) arm64 x86_64"
 LIB="Vendor/macos/xcframeworks/CArchive.xcframework/macos-arm64_x86_64/libCArchive.a"
-if [[ -f "$LIB" ]] && lipo "$LIB" -verify_arch arm64 x86_64 2>/dev/null; then
+if [[ "$(cat Vendor/macos/.build-stamp 2>/dev/null)" == "$WANT" && -f "$LIB" ]] && lipo "$LIB" -verify_arch arm64 x86_64 2>/dev/null; then
   echo "Universal libraries already built."
 else
   Scripts/build-deps-macos.sh --universal
@@ -125,7 +127,8 @@ trap 'hdiutil detach "$MOUNT" -force >/dev/null 2>&1 || true' EXIT
 [[ -d "$MOUNT/Zipper.app" ]] || fail "the DMG has no Zipper.app"
 [[ -L "$MOUNT/Applications" ]] || fail "the DMG has no Applications shortcut"
 codesign --verify --deep --strict "$MOUNT/Zipper.app"
-hdiutil detach "$MOUNT" >/dev/null
+# Read-only image: forcing is safe, and avoids the transient "Resource busy" right after codesign.
+hdiutil detach "$MOUNT" -force >/dev/null
 trap - EXIT
 if [[ $NOTARIZE == 1 ]]; then
   spctl --assess --type execute --verbose "$APP"

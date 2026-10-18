@@ -218,7 +218,7 @@ secret**:
 | `APPLE_TEAM_ID` | Your Team ID (developer.apple.com › Account › Membership details). |
 | `NOTARY_KEY_P8` | An App Store Connect API key for notarization. In App Store Connect, go to **Users and Access › Integrations › App Store Connect API**, generate a team key with the *Developer* role, download `AuthKey_XXXXXXXXXX.p8`, and paste its whole contents. Apple lets you download it only once. |
 | `NOTARY_KEY_ID` | That key's Key ID (the `XXXXXXXXXX`). |
-| `NOTARY_ISSUER_ID` | The Issuer ID shown above the keys list. Leave it unset if you use an individual key. |
+| `NOTARY_ISSUER_ID` | The Issuer ID shown above the keys list. Required: the runner's Xcode 16 notarytool accepts only team keys (individual keys need Xcode 26). |
 
 The workflow imports the certificate into a temporary keychain that it deletes at the end, and only
 the job that drafts the release can write to the repository.

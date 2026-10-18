@@ -23,6 +23,13 @@ ARCHS="arm64"
 [[ "${1:-}" == "--universal" ]] && ARCHS="arm64 x86_64"
 MIN_MACOS=14.0
 mkdir -p "$PREFIX" "$SRC"
+# Start from empty library and header folders: Apple's ar can't update the fat archives a previous
+# universal build left, and stale files must not survive a version change.
+rm -rf "$PREFIX/lib" "$PREFIX/include" "$PREFIX/helpers"
+mkdir -p "$PREFIX/lib/pkgconfig"
+# Written last, only when everything succeeded: Scripts/release.sh compares it with this script.
+STAMP="$PREFIX/.build-stamp"
+rm -f "$STAMP"
 
 fetch() { # url file sha256
   local url=$1 file=$2 sum=$3
@@ -159,5 +166,6 @@ for lib in "$B/libCArchive.a" "$PREFIX/lib/liblzma.a" "$B/libCBrotli.a"; do
 done
 for a in $ARCHS; do lipo "$PREFIX/helpers/7zz" -verify_arch "$a" || { echo "7zz is missing $a" >&2; exit 1; }; done
 
+printf '%s %s\n' "$(shasum -a 256 "$ROOT/Scripts/build-deps-macos.sh" | cut -d' ' -f1)" "$ARCHS" > "$STAMP"
 echo "Dependencies installed in $PREFIX ($ARCHS)"
 echo "Package.swift now uses $XCF automatically: run 'swift build' or 'xcodegen generate' and build in Xcode."
