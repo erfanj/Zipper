@@ -50,17 +50,26 @@ jobs:
       - uses: actions/checkout@v4
       - name: Show toolchain
         run: xcodebuild -version && swift --version
-      - name: Cache vendored libraries
+      # Caches are restored and saved as separate steps so they're kept even when a later step
+      # fails (actions/cache only saves after a successful job).
+      - name: Restore vendored libraries
         id: vendor
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: Vendor/macos
           key: vendor-${{ runner.os }}-${{ hashFiles('Scripts/build-deps-macos.sh') }}
       - name: Build pinned dependencies
         if: steps.vendor.outputs.cache-hit != 'true'
         run: Scripts/build-deps-macos.sh
-      - name: Cache build products (incremental rebuilds on later runs)
-        uses: actions/cache@v4
+      - name: Save vendored libraries
+        if: steps.vendor.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: Vendor/macos
+          key: ${{ steps.vendor.outputs.cache-primary-key }}
+      - name: Restore build products (incremental rebuilds)
+        id: products
+        uses: actions/cache/restore@v4
         with:
           path: |
             build/DerivedData
@@ -101,3 +110,11 @@ jobs:
         run: |
           swift build --build-tests
           swift test --skip-build
+      - name: Save build products
+        if: always() && steps.products.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            build/DerivedData
+            .build
+          key: ${{ steps.products.outputs.cache-primary-key }}
