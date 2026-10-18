@@ -50,7 +50,7 @@ final class SpecialistEngineTests: XCTestCase {
             XCTAssertEqual(report.result, .passed, "\(format): \(report.textSummary)")
         }
         // ISO is also readable by an independent implementation.
-        if let sevenZ = TestFS.which("7z") {
+        if let sevenZ = TestFS.sevenZip {
             let (rc, out) = try TestFS.run(sevenZ, ["t", work.appendingPathComponent("out.iso").path])
             XCTAssertEqual(rc, 0, out)
         }

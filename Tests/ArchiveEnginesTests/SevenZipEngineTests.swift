@@ -24,6 +24,22 @@ final class SevenZipEngineTests: XCTestCase {
         return sink.report
     }
 
+    /// 7-Zip rejects non-ASCII passwords for encrypted ZIPs with a bare E_INVALIDARG; the engine
+    /// explains instead, and still accepts them for 7z.
+    func testNonASCIIZipPasswordIsExplained() throws {
+        let work = TestFS.tempDir("7zascii")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let tree = TestFS.sampleTree(in: work.appendingPathComponent("src"))
+        let zip = CompressionSettings(format: .zip, encryption: .init(method: .zipAES256))
+        XCTAssertThrowsError(try create(tree, work.appendingPathComponent("a.zip"), format: .zip, settings: zip, password: "pässwörd")) {
+            XCTAssertEqual(($0 as? ArchiveError)?.code, "invalid-argument", "\($0)")
+            XCTAssertTrue("\($0)".contains("ASCII"), "\($0)")
+        }
+        _ = try create(tree, work.appendingPathComponent("a.zip"), format: .zip, settings: zip, password: "plain-ascii")
+        let sevenZ = CompressionSettings(format: .sevenZip, encryption: .init(method: .sevenZipAES256))
+        _ = try create(tree, work.appendingPathComponent("a.7z"), format: .sevenZip, settings: sevenZ, password: "pässwörd")
+    }
+
     /// Acceptance test 5: encrypted 7z with encrypted file names.
     func testEncrypted7zHidesFilenames() throws {
         let work = TestFS.tempDir("7zenc")
@@ -44,7 +60,7 @@ final class SevenZipEngineTests: XCTestCase {
             XCTAssertEqual(($0 as? ArchiveError)?.code, "password-required", "\($0)")
         }
         // Independent check with the reference tool: listing without a password reveals nothing.
-        if let sevenZ = TestFS.which("7z") {
+        if let sevenZ = TestFS.sevenZip {
             let (_, text) = try TestFS.run(sevenZ, ["l", "-slt", "-p", out.path], stdin: "\n")
             XCTAssertFalse(text.contains("readme.txt"))
         }

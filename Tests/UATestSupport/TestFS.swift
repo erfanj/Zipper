@@ -83,6 +83,25 @@ public enum TestFS {
         return nil
     }
 
+    /// The reference 7-Zip: the official program, version 21 or later (what Zipper bundles and
+    /// requires). `UA_HELPERS_DIR` is searched first, so `UA_HELPERS_DIR=Vendor/macos/helpers` tests
+    /// against the bundled 7zz. Old p7zip builds (macOS runners ship 17.05) are not a reference: they
+    /// mishandle non-ASCII ZIP AES passwords.
+    public static let sevenZip: String? = {
+        var dirs = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
+        if let custom = ProcessInfo.processInfo.environment["UA_HELPERS_DIR"], !custom.isEmpty { dirs.insert(custom, at: 0) }
+        for dir in dirs {
+            for name in ["7zz", "7z"] {
+                let path = dir + "/" + name
+                guard FileManager.default.isExecutableFile(atPath: path), let text = try? run(path, ["i"]).1,
+                      let m = text.range(of: #"7-Zip (\(z\) )?[0-9]+\.[0-9]+"#, options: .regularExpression),
+                      let version = Double(text[m].split(separator: " ").last ?? ""), version >= 21 else { continue }
+                return path
+            }
+        }
+        return nil
+    }()
+
     /// Runs a reference tool. Input is passed on stdin (used for passwords so they never appear in argv).
     @discardableResult
     public static func run(_ tool: String, _ args: [String], cwd: URL? = nil, stdin: String? = nil) throws -> (Int32, String) {

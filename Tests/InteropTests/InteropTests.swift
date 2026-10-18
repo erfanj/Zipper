@@ -66,7 +66,7 @@ final class ForwardInteropTests: XCTestCase {
             do {
                 let opened = try service.open(url, options: ro)
                 let report = try service.test(url, options: ro)
-                guard report.result == .passed else { throw ArchiveError.verificationFailed(details: report.issues.map(\.message).joined(separator: "; ")) }
+                guard report.result == .passed else { throw FixtureFailure(report: report) }
                 let dest = work.appendingPathComponent(UUID().uuidString)
                 let o = try service.extract(ExtractRequest(archive: url, destination: dest, mode: .here, readOptions: ro))
                 let got = Dictionary(TestFS.digestTree(dest).map { ($0.key.precomposedStringWithCanonicalMapping, $0.value) }, uniquingKeysWith: { a, _ in a })
@@ -92,23 +92,37 @@ final class ForwardInteropTests: XCTestCase {
                 passed += 1
                 rows.append("PASS  \(fx.file.padding(toLength: 34, withPad: " ", startingAt: 0)) \(opened.engine.rawValue)/\(o.engine.rawValue)\(fx.note.map { "  (\($0))" } ?? "")")
             } catch {
-                let e = ArchiveError.wrap(error)
-                if let reason = Self.missingHelper(for: fx, error: e) {
+                let failure = error as? FixtureFailure
+                let e = failure?.error ?? ArchiveError.wrap(error)
+                if let reason = Self.missingHelper(for: fx, error: e, codes: failure?.codes ?? [e.code]) {
                     missing += 1
                     rows.append("SKIP  \(fx.file) (\(reason))")
                     continue
                 }
                 rows.append("FAIL  \(fx.file): \(e)")
-                XCTFail("\(fx.file): \(error)")
+                XCTFail("\(fx.file): \(e)")
             }
         }
         print("Interop results: \(passed) passed, \(missing) skipped, \(manifest.fixtures.count - passed - missing) failed\n" + rows.joined(separator: "\n"))
     }
 
+    /// A failed integrity test, keeping the issue codes.
+    struct FixtureFailure: Error {
+        let report: IntegrityReport
+        var codes: Set<String> { Set(report.issues.map(\.code)) }
+        var error: ArchiveError { .verificationFailed(details: report.issues.map(\.message).joined(separator: "; ")) }
+    }
+
+    static let sevenZip = SevenZipEngine()
+
     /// Fixtures that need an optional helper this machine doesn't have are skipped with the reason,
     /// never reported as passed (a missing tool is not a defect in Zipper).
-    static func missingHelper(for fx: Manifest.Fixture, error: ArchiveError) -> String? {
+    static func missingHelper(for fx: Manifest.Fixture, error: ArchiveError, codes: Set<String>) -> String? {
         if case .noEngineAvailable = error { return "no engine for this format is installed" }
+        // Encrypted 7z and 7-Zip-only methods such as Deflate64 need 7-Zip; libarchive can't decode them.
+        if !sevenZip.descriptor.isAvailable, !codes.isDisjoint(with: ["unsupported-encryption", "unsupported-method"]) {
+            return "needs 7-Zip: \(sevenZip.descriptor.unavailableReason ?? "not installed")"
+        }
         if fx.format == "rar", !hasRarCodec { return "7-Zip's RAR codec is not installed (Linux: 7zip-rar)" }
         if fx.format == "arc", HelperLocator.find(["nomarch"]) == nil { return "nomarch is not installed" }
         return nil
@@ -117,9 +131,9 @@ final class ForwardInteropTests: XCTestCase {
     /// Whether the installed 7-Zip can decode RAR (codec 40305, Rar5). Distribution builds of 7-Zip
     /// often ship the RAR codec separately; the official macOS 7zz bundled with Zipper includes it.
     static let hasRarCodec: Bool = {
-        guard let exe = HelperLocator.find(["7zz", "7z"]) else { return false }
+        guard let exe = TestFS.sevenZip else { return false }
         let p = Process()
-        p.executableURL = exe
+        p.executableURL = URL(fileURLWithPath: exe)
         p.arguments = ["i"]
         let pipe = Pipe()
         p.standardOutput = pipe
@@ -190,7 +204,7 @@ final class ReverseInteropTests: XCTestCase {
 
     /// Acceptance test 4: AES-256 ZIP decrypted by an independent implementation (7-Zip).
     func testAESZipDecryptedBy7Zip() throws {
-        guard let sevenZ = TestFS.which("7z") else { throw XCTSkip("7z not installed") }
+        guard let sevenZ = TestFS.sevenZip else { throw XCTSkip("7-Zip 21 or later is not installed") }
         // Created with libarchive specifically (7-Zip would be testing itself).
         service.registry.preferred[.zip] = .libarchive
         let zip = try make(CompressionSettings(format: .zip, encryption: .init(method: .zipAES256)), password: "Ünïcode-pässwörd")
@@ -207,7 +221,7 @@ final class ReverseInteropTests: XCTestCase {
     }
 
     func test7zReadBy7Zip() throws {
-        guard let sevenZ = TestFS.which("7z") else { throw XCTSkip("7z not installed") }
+        guard let sevenZ = TestFS.sevenZip else { throw XCTSkip("7-Zip 21 or later is not installed") }
         for engine in [EngineID.libarchive, .sevenZip] {
             service.registry.preferred[.sevenZip] = engine
             let a = try make(CompressionSettings(format: .sevenZip, method: .lzma2))
@@ -247,7 +261,7 @@ final class ReverseInteropTests: XCTestCase {
     }
 
     func testSplit7zReadBy7Zip() throws {
-        guard let sevenZ = TestFS.which("7z"), service.registry.engine(.sevenZip)?.descriptor.isAvailable == true else { throw XCTSkip("7-Zip missing") }
+        guard let sevenZ = TestFS.sevenZip, service.registry.engine(.sevenZip)?.descriptor.isAvailable == true else { throw XCTSkip("7-Zip missing") }
         // Store (level 0) so the size is predictable: the sample data compresses extremely well.
         var s = CompressionSettings(format: .sevenZip, level: 0)
         s.splitVolumeSize = 50_000

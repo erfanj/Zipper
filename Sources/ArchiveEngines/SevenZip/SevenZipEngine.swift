@@ -201,6 +201,8 @@ public final class SevenZipEngine: ArchiveEngine, @unchecked Sendable {
 
     static let commonSwitches = ["-sccUTF-8", "-scsUTF-16LE", "-bd", "-bb0", "-y"]
 
+    public static let asciiZipPasswordMessage = "Encrypted ZIP archives made with 7-Zip (including split ZIPs) need a password in plain ASCII: no accented letters, emoji or other scripts. Change the password, or use the 7z format."
+
     /// Writes a 7-Zip list file. UTF-16LE is used because 7-Zip 23 rejects UTF-8 list files that
     /// contain characters outside the Basic Multilingual Plane (emoji, some CJK).
     static func writeListFile(_ paths: [String], to url: URL) throws {
@@ -466,6 +468,11 @@ public final class SevenZipEngine: ArchiveEngine, @unchecked Sendable {
             case (.zip, .zipCrypto): args.append("-mem=ZipCrypto")
             default: throw ArchiveError.invalidArgument("\(enc.method.displayName) can't be used with this format.")
             }
+            // 7-Zip refuses to encrypt ZIPs with non-ASCII passwords (E_INVALIDARG): the ZIP format
+            // doesn't record which encoding a password used.
+            if container == .zip, request.password?.withBytes({ $0.contains { $0 >= 0x80 } }) == true {
+                throw ArchiveError.invalidArgument(Self.asciiZipPasswordMessage)
+            }
             args.append("-p")
             needsPassword = true
         }
@@ -603,7 +610,10 @@ public final class SevenZipEngine: ArchiveEngine, @unchecked Sendable {
         if password != nil {
             args.append("-p")
             if settings.encryption?.encryptFilenames == true { args.append("-mhe=on") }
-            if FormatDetectorShim.isZip(workingCopy) { args.append("-mem=AES256") }
+            if FormatDetectorShim.isZip(workingCopy) {
+                if password?.withBytes({ $0.contains { $0 >= 0x80 } }) == true { throw ArchiveError.invalidArgument(Self.asciiZipPasswordMessage) }
+                args.append("-mem=AES256")
+            }
         }
         args += ["-i@" + list.path, "--", workingCopy.path]
         let proc = HelperProcess(try exe(), args)

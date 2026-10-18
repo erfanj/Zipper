@@ -15,7 +15,10 @@ The helper-based tests need the reference tools on `PATH` (Linux package names):
 (or a 7-Zip 23+ `7zz`), `unar`/`lsar`, `zip`/`unzip`, `rar` (RARLAB, optional), `lzip`, `lzop`,
 `zpaq`, `lrzip`, `nomarch`, `jlha`/`lha`, `python3`. Tests whose tool is missing are **skipped with a
 reason**, never reported as passed. On macOS, `Scripts/build-deps-macos.sh` builds the bundled 7-Zip
-and libraries.
+and libraries; point the tests at that 7-Zip with
+`UA_HELPERS_DIR=$PWD/Vendor/macos/helpers swift test --skip-build` (the CI job does). The reference
+7-Zip must be the official program, 21.00 or later: older p7zip builds (macOS runners ship 17.05)
+are ignored, because they mishandle non-ASCII ZIP passwords.
 
 ## Inventory
 

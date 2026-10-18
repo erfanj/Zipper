@@ -182,12 +182,29 @@ public final class LibArchiveEngine: ArchiveEngine, @unchecked Sendable {
 
     public func extract(_ source: ArchiveSource, selection: EntrySelection, into sink: ExtractionSink,
                         options: ReadOptions, progress: OperationProgress) throws {
+        progress.setTotal(bytes: progress.snapshot.totalBytes ?? source.totalSize, items: nil)
+        // A salvage pass that hits a fatal data error resumes in a fresh reader after the entry that
+        // failed. Each restart starts further on, so this ends.
+        var resumeAt = 0
+        while let next = try extractPass(source, selection: selection, into: sink, options: options, progress: progress, from: resumeAt) {
+            resumeAt = next
+        }
+    }
+
+    /// Reads entries `from` onwards (earlier ones are skipped without decoding their data). Returns
+    /// the index to resume at when salvage must reopen the archive, or nil when the pass is done.
+    ///
+    /// libarchive puts the whole reader into a fatal state after some data errors (libarchive 3.8
+    /// does after a corrupt Deflate stream in a ZIP), so later entries can only be reached by
+    /// reopening. For ZIP the skip seeks through the central directory; for compressed streams it
+    /// meets the same damage again and the salvage stops there.
+    private func extractPass(_ source: ArchiveSource, selection: EntrySelection, into sink: ExtractionSink,
+                             options: ReadOptions, progress: OperationProgress, from resumeAt: Int) throws -> Int? {
         let reader = try makeReader(source, options)
         var entryPtr: OpaquePointer?
         let rawName = rawEntryName(source)
         var index = 0
         let zeros = [UInt8](repeating: 0, count: 1 << 16)
-        progress.setTotal(bytes: progress.snapshot.totalBytes ?? source.totalSize, items: nil)
         while true {
             try progress.checkCancelled()
             let r = archive_read_next_header(reader.a, &entryPtr)
@@ -205,6 +222,7 @@ public final class LibArchiveEngine: ArchiveEngine, @unchecked Sendable {
             guard let e = entryPtr else { break }
             var entry = ArchiveEntry.from(libarchive: e, index: index)
             index += 1
+            guard index > resumeAt else { continue }
             if isRaw(source) { entry.path = rawName; entry.type = .file }
             guard selection.includes(entry.path) else { continue }
             let extras = EntryExtras(extendedAttributes: ArchiveEntry.xattrs(of: e))
@@ -213,12 +231,16 @@ public final class LibArchiveEngine: ArchiveEngine, @unchecked Sendable {
             var size = 0
             var offset: Int64 = 0
             var position: Int64 = 0
+            var fatal = false
             do {
                 while true {
                     let d = archive_read_data_block(reader.a, &buf, &size, &offset)
                     if d == LA.eof { break }
                     if d == LA.retry { continue }
-                    if d < LA.warn { throw reader.error(entry: entry.path) }
+                    if d < LA.warn {
+                        fatal = d <= LA.fatal
+                        throw reader.error(entry: entry.path)
+                    }
                     // Sparse holes: materialise as zeros so the result matches the original size.
                     while offset > position {
                         let n = Int(min(Int64(zeros.count), offset - position))
@@ -245,12 +267,14 @@ public final class LibArchiveEngine: ArchiveEngine, @unchecked Sendable {
                 writer.abort()
                 if let log = options.salvage, let ae = error as? ArchiveError, Self.isEntryLevel(ae) {
                     log.record(entry.normalizedPath, ae.explanation)
+                    if fatal { return index }
                     continue
                 }
                 throw error
             }
         }
         progress.setProcessed(reader.compressedBytesRead)
+        return nil
     }
 
     /// Errors confined to one entry's data, after which reading can continue with the next entry.

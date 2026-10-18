@@ -74,6 +74,14 @@
   without its lock.
 * **Error messages:** a file whose name suggested an archive but whose content didn't match showed
   a helper tool's raw JSON. It now reads "not an archive Zipper recognises".
+* **Recovering damaged archives on the Mac:** with libarchive 3.8 (the version the app bundles), a
+  corrupt Deflate stream puts the whole reader into a fatal state, so salvage stopped at the first
+  damaged file and recovered nothing after it. Salvage now reopens the archive and continues after
+  the damaged entry; for ZIP that skip seeks through the central directory. This was found by the
+  first macOS test run; Linux's libarchive 3.7.2 hid it.
+* **Encrypted split ZIPs:** 7-Zip (which makes split ZIPs) refuses non-ASCII ZIP passwords and
+  reported only `E_INVALIDARG`. The engine now explains the rule, and the Compress sheet flags it
+  before you start. Unsplit ZIPs (libarchive) and 7z accept any password.
 
 ### Build and distribution
 
@@ -97,6 +105,10 @@
   * the invented `org.ultimate-archivers` type identifiers are replaced.
 * **Quick Look:** the preview could hang on huge compressed tarballs; it now stops after 4 seconds
   with a message.
+* **First macOS build:** CI now builds the app with Xcode 16.4, then checks the signature, the
+  embedded helpers and the Quick Look extension, and uploads the app. Two compile fixes came out of
+  the first run: the archive browser's modifier chain was too long for the type checker in
+  reasonable time, and `.quickLookPreview` needs `import QuickLook`.
 * **Scripts and CI:** `build-app.sh` left `$(…)` placeholders in Info.plist. `notarize.sh`
   notarizes and staples apps and DMGs and prints Apple's log on rejection. `make-dmg.sh` takes the
   exported app. Added `Packaging/ExportOptions.plist` and a CI workflow (Linux tests; macOS app
@@ -108,3 +120,6 @@
   type-checker covers every call the UI makes into the core.
 * The interop test skips fixtures whose optional helper isn't installed (as documented) instead of
   failing.
+* The macOS test run uses the bundled 7-Zip as engine and reference (`UA_HELPERS_DIR`). Tests now
+  ignore p7zip builds older than 21.00 (macOS runners ship 17.05, which rejects valid non-ASCII AES
+  passwords). The deep-path stress test is sized to macOS's 1,024-byte path limit.

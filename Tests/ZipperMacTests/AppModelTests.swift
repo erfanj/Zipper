@@ -111,6 +111,23 @@ final class FormTests: XCTestCase {
         }
     }
 
+    func testSplitZipNeedsAnASCIIPassword() async throws {
+        let folder = dir.appendingPathComponent("folder")
+        await MainActor.run {
+            let form = CompressForm(items: [folder], model: Self.makeModel())
+            form.format = .zip
+            form.setEncrypt(true)
+            form.password = "pässwörd"
+            form.confirmation = "pässwörd"
+            XCTAssertTrue(form.canCreate, "libarchive encrypts unsplit ZIPs with any password")
+            form.split = true
+            form.splitText = "10 MB"
+            XCTAssertEqual(form.problem?.contains("ASCII"), true, "split ZIPs are made by 7-Zip")
+            form.format = .sevenZip
+            if form.encrypt, form.split { XCTAssertNil(form.problem, "7z accepts any password") }
+        }
+    }
+
     func testStreamFormatsNeedASingleFile() async {
         let folder = dir.appendingPathComponent("folder")
         let single = dir.appendingPathComponent("single.txt")

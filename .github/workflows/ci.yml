@@ -107,6 +107,10 @@ jobs:
           retention-days: 7
       - name: Build and test the package (macOS engines, Keychain, Apple Archive)
         timeout-minutes: 25
+        # The bundled 7-Zip (Vendor/macos/helpers/7zz) is the engine and the reference tool; the
+        # runner's own 7z is p7zip 17.05, older than the 21.00 Zipper requires.
+        env:
+          UA_HELPERS_DIR: ${{ github.workspace }}/Vendor/macos/helpers
         run: |
           swift build --build-tests
           swift test --skip-build

@@ -262,6 +262,10 @@ final class CompressForm {
         if encrypt {
             if password.isEmpty { return "Enter a password." }
             if password != confirmation { return "The passwords don't match." }
+            // Split ZIPs are made by 7-Zip, which refuses non-ASCII ZIP passwords.
+            if split, FormatCatalog.descriptor(for: settings.format)?.effectiveContainer == .zip, !password.allSatisfy(\.isASCII) {
+                return "Split ZIP archives need a password in plain ASCII (no accented letters, emoji or other scripts). Change the password, or use the 7z format."
+            }
         }
         if split, FileSplitter.parseSize(splitText) == nil { return "Enter a part size such as 100 MB or 1.5 GB." }
         if archiveName.contains("/") || archiveName.contains(":") { return "Archive names can't contain “/” or “:”." }

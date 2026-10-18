@@ -115,8 +115,17 @@ final class StressTests: XCTestCase {
     }
 
     func testDeepDirectoriesAndLongNames() throws {
+        // As deep as the platform allows: 40 levels on Linux (PATH_MAX 4096). macOS caps paths at 1024
+        // bytes, which leaves room for about a dozen levels plus the long file name and extraction's
+        // staging folder.
+        #if os(macOS)
+        let pathMax = 1024
+        #else
+        let pathMax = 4096
+        #endif
+        let levels = min(40, (pathMax - work.path.utf8.count - 400) / 52)
         var dir = work.appendingPathComponent("deep")
-        for i in 0..<40 { dir = dir.appendingPathComponent("level-\(i)-" + String(repeating: "d", count: 40)) }
+        for i in 0..<levels { dir = dir.appendingPathComponent("level-\(i)-" + String(repeating: "d", count: 40)) }
         let longName = String(repeating: "长", count: 80) + ".txt" // 244 bytes in UTF-8
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try Data("deep".utf8).write(to: dir.appendingPathComponent(longName))
