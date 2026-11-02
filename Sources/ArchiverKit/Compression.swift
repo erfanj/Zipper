@@ -140,7 +140,8 @@ extension ArchiveService {
                 }
                 return request.archiveName ?? "Archive"
             }()
-            let output = Self.uniqueURL(in: destDir, name: name + "." + Self.fileExtension(for: settings.format))
+            let output = Self.uniqueURL(in: destDir, name: name + "." + Self.fileExtension(for: settings.format),
+                                        alsoTaken: settings.splitVolumeSize == nil ? [] : [".001"])
             let sub = OperationProgress()
             sub.throttle = 0.25
             let base = progress.snapshot.processedBytes

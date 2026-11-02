@@ -206,12 +206,18 @@ func compressionSettings(_ args: Args, defaultFormat: FormatID) throws -> Compre
         s.level = v
     }
     if let m = args.opt("method") { s.method = CompressionMethod(rawValue: m.lowercased()) }
-    if let t = args.opt("threads") { s.threads = Int(t) }
+    if let t = args.opt("threads") {
+        guard let n = Int(t), n > 0 else { throw UsageError(message: "--threads must be a whole number of 1 or more") }
+        s.threads = n
+    }
     if let d = args.opt("dictionary") {
         guard let v = FileSplitter.parseSize(d) else { throw UsageError(message: "Invalid --dictionary") }
         s.dictionarySize = v
     }
-    if let w = args.opt("word-size") { s.wordSize = Int(w) }
+    if let w = args.opt("word-size") {
+        guard let n = Int(w), n > 0 else { throw UsageError(message: "--word-size must be a whole number such as 64 or 273") }
+        s.wordSize = n
+    }
     if let solid = args.opt("solid") {
         switch solid.lowercased() {
         case "on", "yes": s.solid = .on
@@ -262,12 +268,55 @@ struct CompressJSON: Encodable {
     var warnings: [String]
 }
 
+func performanceMode(_ s: String) throws -> PerformanceMode {
+    let key = s.lowercased().replacingOccurrences(of: "-", with: "")
+    guard let m = PerformanceMode.allCases.first(where: { $0.rawValue.lowercased() == key }) else {
+        throw UsageError(message: "--performance must be one of: maximum, balanced, energy-saver")
+    }
+    return m
+}
+
+/// Moves freshly created archive files over `target` (an existing archive, or the first part of an
+/// existing split set). rename(2) replaces each file atomically, so the old archive is intact until
+/// the new one is in place; parts of an old split set beyond the new set's last part are removed.
+func replaceOutputs(_ outputs: [URL], with target: URL) throws -> [URL] {
+    guard let first = outputs.first else { return outputs }
+    let fm = FileManager.default
+    let isSet = outputs.count > 1 || first.lastPathComponent.hasSuffix(".001")
+    let producedBase = isSet ? String(first.path.dropLast(4)) : first.path
+    var final: [URL] = []
+    for u in outputs {
+        let dest = URL(fileURLWithPath: target.path + String(u.path.dropFirst(producedBase.count)))
+        if u.path != dest.path {
+            guard rename(u.path, dest.path) == 0 else {
+                throw ArchiveError.io(path: dest.path, code: errno, message: String(cString: strerror(errno)))
+            }
+        }
+        final.append(dest)
+    }
+    // What's left of the replaced archive: a single file where a set now is, or extra old parts.
+    let keep = Set(final.map(\.path))
+    var stale = isSet ? [target] : []
+    let dir = target.deletingLastPathComponent()
+    let prefix = target.lastPathComponent + "."
+    for name in (try? fm.contentsOfDirectory(atPath: dir.path)) ?? [] where name.hasPrefix(prefix) {
+        let suffix = name.dropFirst(prefix.count)
+        if suffix.count >= 3, suffix.allSatisfy(\.isNumber) { stale.append(dir.appendingPathComponent(name)) }
+    }
+    for u in stale where !keep.contains(u.path) {
+        var isDir: ObjCBool = false
+        if fm.fileExists(atPath: u.path, isDirectory: &isDir), !isDir.boolValue { try? fm.removeItem(at: u) }
+    }
+    return final
+}
+
 func cmdCompress(_ args: Args) throws -> Exit {
     guard !args.positionals.isEmpty else { throw UsageError(message: "zipper compress ITEMS… [-o OUTPUT | --format F --dest DIR]") }
     let items = args.positionals.map(url)
     var dest: URL? = args.opt("dest").map(url)
     var name: String? = args.opt("name")
     var defaultFormat = FormatID.zip
+    var replaceTarget: URL?
     if let out = args.opt("output", "o") {
         let o = url(out)
         dest = o.deletingLastPathComponent()
@@ -277,20 +326,31 @@ func cmdCompress(_ args: Args) throws -> Exit {
         } else {
             name = o.lastPathComponent
         }
-        if FileManager.default.fileExists(atPath: o.path), !args.has("force") {
-            throw ArchiveError.destinationExists(path: o.path)
+        var isDir: ObjCBool = false
+        if FileManager.default.fileExists(atPath: o.path, isDirectory: &isDir), isDir.boolValue {
+            throw UsageError(message: "“\(o.lastPathComponent)” is a folder. -o names the archive file to create; --force only ever replaces an archive file.")
         }
-        if args.has("force") { try? FileManager.default.removeItem(at: o) }
+        // A split set is written as OUT.001, OUT.002…, so OUT.001 counts as OUT existing.
+        let existing = [o, URL(fileURLWithPath: o.path + ".001")].filter { FileManager.default.fileExists(atPath: $0.path) }
+        if let first = existing.first {
+            guard args.has("force") else { throw ArchiveError.destinationExists(path: first.path) }
+            // Nothing is deleted now: the new archive is written under a free name and only moved over
+            // the old one after it was created (and verified, with --verify) successfully.
+            replaceTarget = o
+        }
     }
     let settings = try compressionSettings(args, defaultFormat: defaultFormat)
     let pw = settings.encryption != nil ? try newPassword(args, sourceAlsoFromStdin: false) : nil
-    if let perf = args.opt("performance"), let m = PerformanceMode(rawValue: perf) { service.performanceMode = m }
+    if let perf = args.opt("performance") { service.performanceMode = try performanceMode(perf) }
     let p = OperationProgress()
     attachProgress(p)
     installSignalHandler(p)
-    let outcome = try service.compress(CompressRequest(items: items, destinationDirectory: dest, archiveName: name, settings: settings,
+    var outcome = try service.compress(CompressRequest(items: items, destinationDirectory: dest, archiveName: name, settings: settings,
                                                        password: pw, verifyAfterCreation: args.has("verify")), progress: p)
     endProgress()
+    if let target = replaceTarget, outcome.archives.count == 1 {
+        outcome.archives[0].outputs = try replaceOutputs(outcome.archives[0].outputs, with: target)
+    }
     if jsonOutput {
         emitJSON(CompressJSON(archives: outcome.archives.map { .init(outputs: $0.outputs.map(\.path), inputBytes: $0.inputBytes, outputBytes: $0.outputBytes,
                                                                      entries: $0.entryCount, engine: $0.engine.rawValue,
@@ -324,7 +384,10 @@ func extractionOptions(_ args: Args) throws -> ExtractionOptions {
     }
     if args.has("trusted") { o.limits = .trusted; o.linkPolicy = .preserveAll }
     if args.has("no-links") { o.linkPolicy = .skip }
-    if let m = args.opt("max-size"), let v = FileSplitter.parseSize(m) { o.limits.maxTotalBytes = v }
+    if let m = args.opt("max-size") {
+        guard let v = FileSplitter.parseSize(m), v > 0 else { throw UsageError(message: "--max-size needs a size such as 500MB or 20GB") }
+        o.limits.maxTotalBytes = v
+    }
     if args.has("keep-macosx") { o.skipAppleDoubleArtifacts = false }
     if args.has("no-permissions") { o.restorePermissions = false }
     return o
@@ -524,7 +587,10 @@ func cmdHash(_ args: Args) throws -> Exit {
         return r.passed ? .ok : .integrity
     }
     guard !args.positionals.isEmpty else { throw UsageError(message: "zipper hash FILES… [--algo sha256] [--manifest OUT]") }
-    let algo = HashAlgorithm(rawValue: (args.opt("algo") ?? "sha256").lowercased().replacingOccurrences(of: "-", with: "")) ?? .sha256
+    let algoName = (args.opt("algo") ?? "sha256").lowercased().replacingOccurrences(of: "-", with: "")
+    guard let algo = HashAlgorithm(rawValue: algoName) else {
+        throw UsageError(message: "Unknown --algo “\(args.opt("algo") ?? "")”. Use one of: \(HashAlgorithm.allCases.map(\.rawValue).joined(separator: ", "))")
+    }
     if let note = algo.note, !quiet { printErr("Note: \(algo.displayName) — \(note)") }
     let files = args.positionals.map(url)
     if let m = args.opt("manifest") {
@@ -586,7 +652,7 @@ func cmdSplit(_ args: Args) throws -> Exit {
     let r = try FileSplitter.split(url(f), partSize: size, into: args.opt("dest", "o").map(url), progress: p)
     endProgress()
     if jsonOutput { emitJSON(["parts": r.parts.map(\.path), "sha256": [r.sha256]]) } else {
-        print("Split into \(r.parts.count) parts. SHA-256 \(r.sha256)\(r.manifest.map { " (manifest: \($0.lastPathComponent))" } ?? "")")
+        print("Split into \(r.parts.count) part\(r.parts.count == 1 ? "" : "s"). SHA-256 \(r.sha256)\(r.manifest.map { " (manifest: \($0.lastPathComponent))" } ?? "")")
     }
     return .ok
 }
@@ -656,7 +722,9 @@ func cmdEdit(_ args: Args) throws -> Exit {
 func cmdAdvise(_ args: Args) throws -> Exit {
     guard !args.positionals.isEmpty else { throw UsageError(message: "zipper advise ITEMS… [--intent general|windows|smallest|fastest|mac]") }
     let c = try SourceCollector.collect(args.positionals.map(url), settings: CompressionSettings())
-    let intent: AdvisorIntent = ["windows": .shareWithWindows, "smallest": .smallestSize, "fastest": .fastest, "mac": .macArchival][args.opt("intent") ?? ""] ?? .general
+    let intents: [String: AdvisorIntent] = ["general": .general, "windows": .shareWithWindows, "smallest": .smallestSize, "fastest": .fastest, "mac": .macArchival]
+    let intentName = (args.opt("intent") ?? "general").lowercased()
+    guard let intent = intents[intentName] else { throw UsageError(message: "--intent must be one of: general, windows, smallest, fastest, mac") }
     let profile = CompressionAdvisor.profile(c, compressor: LibArchiveSampleCompressor(), methods: [.deflate, .lzma2, .zstd, .xz])
     let rec = CompressionAdvisor.recommend(profile, intent: intent)
     func line(_ o: Recommendation.Option) -> String {
@@ -709,8 +777,17 @@ func cmdPresets(_ args: Args) throws -> Exit {
 }
 
 func cmdGenpass(_ args: Args) throws -> Exit {
-    let pw = args.has("passphrase") ? PasswordGenerator.passphrase(words: Int(args.opt("length") ?? "6") ?? 6)
-        : PasswordGenerator.generate(length: Int(args.opt("length") ?? "20") ?? 20, symbols: !args.has("no-symbols"))
+    let passphrase = args.has("passphrase")
+    let range = passphrase ? 4...20 : 8...256
+    var length = passphrase ? 6 : 20
+    if let l = args.opt("length") {
+        guard let n = Int(l), range.contains(n) else {
+            throw UsageError(message: "--length must be \(range.lowerBound)–\(range.upperBound) \(passphrase ? "words" : "characters")")
+        }
+        length = n
+    }
+    let pw = passphrase ? PasswordGenerator.passphrase(words: length)
+        : PasswordGenerator.generate(length: length, symbols: !args.has("no-symbols"))
     print(pw)
     let s = PasswordStrength.evaluate(pw)
     if !quiet { printErr("Strength: \(s.rating.label) (~\(Int(s.bits)) bits)") }

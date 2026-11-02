@@ -88,10 +88,18 @@ extension ArchiveService {
     }
 
     /// Returns a URL in `dir` named `name` (or "name 2", "name 3"…) that does not exist yet.
-    public static func uniqueURL(in dir: URL, name: String, isDirectory: Bool = false) -> URL {
+    /// `alsoTaken` lists suffixes whose presence also makes a name taken: a split set is written as
+    /// "name.zip.001", "name.zip.002"… and never as "name.zip" itself.
+    public static func uniqueURL(in dir: URL, name: String, isDirectory: Bool = false, alsoTaken suffixes: [String] = []) -> URL {
         let fm = FileManager.default
+        func free(_ u: URL) -> Bool {
+            ([""] + suffixes).allSatisfy { s in
+                let p = u.path + s
+                return !fm.fileExists(atPath: p) && (try? fm.destinationOfSymbolicLink(atPath: p)) == nil
+            }
+        }
         var candidate = dir.appendingPathComponent(name, isDirectory: isDirectory)
-        if !fm.fileExists(atPath: candidate.path) && (try? fm.destinationOfSymbolicLink(atPath: candidate.path)) == nil { return candidate }
+        if free(candidate) { return candidate }
         let ext = isDirectory ? "" : (name as NSString).pathExtension
         // Keep compound extensions together ("Archive 2.tar.gz").
         var stem = isDirectory || ext.isEmpty ? name : (name as NSString).deletingPathExtension
@@ -103,7 +111,7 @@ extension ArchiveService {
         for i in 2..<100_000 {
             let n = fullExt.isEmpty ? "\(stem) \(i)" : "\(stem) \(i).\(fullExt)"
             candidate = dir.appendingPathComponent(n, isDirectory: isDirectory)
-            if !fm.fileExists(atPath: candidate.path) && (try? fm.destinationOfSymbolicLink(atPath: candidate.path)) == nil { return candidate }
+            if free(candidate) { return candidate }
         }
         return dir.appendingPathComponent("\(stem) \(UUID().uuidString)")
     }
@@ -203,6 +211,12 @@ extension ArchiveService {
         // Restore the staging folder's permissions before it becomes user-visible.
         try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: staging.path)
         let top = ((try? fm.contentsOfDirectory(atPath: staging.path)) ?? []).sorted()
+        // Extracting chosen items that aren't in the archive would otherwise "succeed" with nothing,
+        // leaving an empty folder behind.
+        if top.isEmpty, case .paths(let wanted) = request.selection, !wanted.isEmpty {
+            throw ArchiveError.invalidArgument(wanted.count == 1 ? "“\(wanted.first!)” is not in the archive."
+                                                                 : "None of the \(wanted.count) chosen items are in the archive.")
+        }
         var created: [URL] = []
         var finalRoot = parent
         let base = Self.baseName(for: request.archive)
