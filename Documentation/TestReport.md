@@ -63,12 +63,49 @@ Drag and drop between Finder and the app, Quick Look inside Finder, Finder Quick
 run time, VoiceOver, and the Keychain. They need a person or a signed build on a real Mac; see the
 release checklist in [Distribution.md](Distribution.md).
 
+## Robustness pass
+
+A second round aimed at what a feature test doesn't reach: work running at the same time, other
+programs touching the same files, hostile names and archives, processes that die, and long runs.
+
+| Check | How | Result |
+|---|---|---|
+| Data races | Whole suite under Thread Sanitizer (`swift test --sanitize=thread`) | No race in Zipper. One in a test (fixed). |
+| Memory errors and leaks | Whole suite under Address Sanitizer | No memory-safety errors. Leaks found and fixed: below. |
+| Concurrent edits | Six adds and a rename started together on one archive | Lost data (fixed) |
+| Archive changed by another app mid-edit | Replaced while Zipper was rebuilding it | Overwritten (fixed) |
+| Ctrl-C | SIGINT during compress (tar.xz, 7z, zip) and extract | Exit 130, nothing left behind |
+| Crash / force quit | SIGKILL during compress | Hidden partial files left forever (fixed); 7-Zip helper keeps running (documented, follow-up) |
+| Awkward names | Leading dash, tab, newline, quotes, colon, `*?`, NFD, 240-character names, CJK folders, emoji | Round-trip in ZIP, 7z, tar.gz; a newline was silently dropped from 7z (fixed) |
+| Destinations | Folder compressed into itself; destination is a file; read-only folder | Correct, or a clear error |
+| Empty inputs | Empty files and folders; a 22-byte empty ZIP; a 0-byte `.zip` | Correct; the 0-byte file opened as an archive (fixed) |
+| Hostile archives in the browser | `../`, absolute and duplicate paths, 300 levels deep; every malicious and interop fixture | No crash, no endless walk |
+| Huge archive in the browser | 202,000 entries | Indexed and browsed in ~4 s (debug build) |
+| Files over 4 GB | `UA_RUN_LARGE_TESTS=1` (ZIP64 and the large stress cases) | Pass |
+| Fuzzing | 150 iterations × 11 formats (1,650 mutated archives) | No crash, no escape |
+| Objects outliving their use | Weak references to `ArchiveService`, `AppModel`, `BrowserState` and progress objects after use | Progress objects leaked on every compression (fixed) |
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| R1 | High | **Concurrent edits of one archive lost data.** Each rebuilt from the original and the last to finish replaced the others (six adds and a rename → two adds survived). In the app: Add, then Rename or Update Archive before the first rebuild finishes. | Edits of one archive run one at a time, each on top of the previous one. |
+| R2 | High | **An archive replaced by another app during an edit was overwritten** with a rebuild of the old contents. | The archive's identity is checked before the swap; the other version is kept and the user is told. |
+| R3 | Medium | **Every cancelled compression leaked its encoder's memory** (7.5 MB per cancelled bzip2 compression; zlib too): failing the write callback makes libarchive skip closing its filters. | For bzip2 and zlib, a cancellation discards the output and the handle is closed normally in the background. zstd and helper-program filters keep the immediate abort (they'd keep working for seconds). |
+| R4 | Medium | **Every compression leaked two progress objects and their handlers** (a retain cycle between the operation's progress and the per-archive one). | Weak references, removed after each archive. |
+| R5 | Medium | **Crash leftovers:** after a crash or force quit, hidden partial files (as large as the archive) stayed next to the user's files forever. | Temporary items carry the owning process's ID; the next operation in that folder removes those of processes that are gone. |
+| R6 | Medium | A file name with a line break was **silently left out of 7z archives**. | 7z refuses with a clear message; ZIP and TAR keep the name. |
+| R7 | Low | A 0-byte file named `.zip` opened as an empty archive. | Reported as not an archive. |
+| R8 | Test | A data race in `StressTests` (reading a value the sampling thread was still writing). | The test waits for the sampler to stop. |
+
+Documented rather than fixed: a killed Zipper's 7-Zip helper finishes its job in the background (its
+output is discarded); a backslash in a name is extracted as a folder separator in every format, on
+purpose, because archives made on Windows use it that way.
+
 ## Test counts
 
 | | Before | After |
 |---|---|---|
-| Package tests (`swift test`, Linux) | 125 (3 skipped) | 187 (3 skipped), 0 failures |
-| Package tests on macOS CI (Xcode 16.4, bundled libarchive and 7-Zip) | 125 | 187 (3 skipped), 0 failures |
+| Package tests (`swift test`, Linux) | 125 (3 skipped) | 203 (3 skipped), 0 failures |
+| Package tests on macOS CI (Xcode 16.4, bundled libarchive and 7-Zip) | 125 | 203 (3 skipped), 0 failures |
 | UI tests (XCUITest, macOS CI) | none | 10, 0 failures |
 
 The UI suite took four CI rounds to settle. Every failure on the way was in the tests, not the app:
