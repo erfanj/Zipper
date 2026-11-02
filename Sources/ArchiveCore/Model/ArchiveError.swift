@@ -132,7 +132,7 @@ public enum ArchiveError: Error, Sendable, Equatable {
         case .verificationFailed(let d):
             return "The result did not pass verification. \(d)"
         case .notEditable(let f, let reason):
-            return "\(FormatCatalog.descriptor(for: f)?.name ?? f.rawValue) archives can't be modified in place. \(reason)"
+            return "This \(FormatCatalog.descriptor(for: f)?.name ?? f.rawValue) archive can't be changed. \(reason)"
         case .internalError(let m):
             return "An unexpected internal error occurred: \(m)"
         }
@@ -144,7 +144,8 @@ public enum ArchiveError: Error, Sendable, Equatable {
         case .passwordRequired, .incorrectPassword:
             return ["Check the password for typing errors and keyboard layout.", "Passwords are case-sensitive."]
         case .missingVolume:
-            return ["Put all parts of the archive in the same folder.", "Choose “Locate Missing Part…” to select it manually."]
+            return ["Put all parts of the archive in the same folder, with their original names (for example name.001, name.002… or name.part1.rar, name.part2.rar…).",
+                    "Then open the first part again."]
         case .truncated:
             return ["Download the archive again.", "Use Tools › Repair to recover the readable files."]
         case .damaged, .checksumMismatch:
@@ -160,7 +161,7 @@ public enum ArchiveError: Error, Sendable, Equatable {
         case .permissionDenied:
             return ["Choose a different destination, or grant access in System Settings › Privacy & Security."]
         case .notEditable:
-            return ["Convert the archive to ZIP or 7z, then edit the converted copy."]
+            return ["Convert it to a single ZIP or 7z archive (Tools › Convert), then edit the converted copy."]
         default:
             return []
         }

@@ -99,7 +99,8 @@ final class RepairTool {
         report = nil
         model.run("Analyze \(url.lastPathComponent)", kind: .repair, inputs: [url], onFinish: { self.isRunning = false }) { progress in
             let a = try service.analyzeDamage(url, options: options, progress: progress)
-            Task { @MainActor in self.analysis = a }
+            // Shown only if the user hasn't chosen another archive in the meantime.
+            Task { @MainActor in if self.archive == url { self.analysis = a } }
             return a.estimate
         }
     }
@@ -111,7 +112,7 @@ final class RepairTool {
         isRunning = true
         model.run("Recover from \(url.lastPathComponent)", kind: .repair, inputs: [url], onFinish: { self.isRunning = false }) { progress in
             let r = try service.recover(url, to: destination, options: options, progress: progress)
-            Task { @MainActor in self.report = r }
+            Task { @MainActor in if self.archive == url { self.report = r } }
             return "\(r.recovered.count) files recovered, \(r.failed.count) not recoverable"
         }
     }
@@ -215,7 +216,8 @@ struct ChecksumResult: Identifiable, Sendable {
 @MainActor
 @Observable
 final class ChecksumTool {
-    var files: [URL] = []
+    /// Removing a file from the list removes its result too.
+    var files: [URL] = [] { didSet { if files != oldValue { results.removeAll { r in !files.contains(r.file) } } } }
     var algorithm: HashAlgorithm = .sha256
     var expected = ""
     private(set) var results: [ChecksumResult] = []
@@ -228,7 +230,9 @@ final class ChecksumTool {
     }
 
     func calculate(_ model: AppModel) {
-        let list = files.filter { !$0.hasDirectoryPath }
+        // Folders can be dropped on the list; checksums are for files. (A folder URL doesn't always
+        // end in "/", so ask the file system.)
+        let list = files.filter { !SafeFileIO.isDirectory($0) }
         let alg = algorithm
         results = []
         isRunning = true
@@ -236,14 +240,15 @@ final class ChecksumTool {
             var out: [ChecksumResult] = []
             for f in list { out.append(ChecksumResult(file: f, digest: try StreamingHasher.hashFile(at: f, algorithm: alg, progress: progress))) }
             let results = out
-            Task { @MainActor in self.results = results }
+            Task { @MainActor in self.results = results.filter { self.files.contains($0.file) } }
             return "\(out.count) file\(out.count == 1 ? "" : "s")"
         }
     }
 
     func manifestText() throws -> String {
-        guard let base = files.first?.deletingLastPathComponent() else { throw ArchiveError.invalidArgument("Choose files first.") }
-        return try ChecksumManifest.generate(for: files, base: base, algorithm: algorithm)
+        let list = files.filter { !SafeFileIO.isDirectory($0) }
+        guard let base = list.first?.deletingLastPathComponent() else { throw ArchiveError.invalidArgument("Choose files first. Checksum files list files, not folders.") }
+        return try ChecksumManifest.generate(for: list, base: base, algorithm: algorithm)
     }
 
     var manifestFileName: String { "checksums.\(algorithm.manifestExtension)" }
@@ -293,8 +298,9 @@ final class SplitJoinTool {
 @MainActor
 @Observable
 final class CompareTool {
-    var left: URL?
-    var right: URL?
+    /// Changing either side clears a result that no longer describes them.
+    var left: URL? { didSet { if left != oldValue { result = nil } } }
+    var right: URL? { didSet { if right != oldValue { result = nil } } }
     var compareContents = false
     private(set) var result: ArchiverKit.ComparisonResult?
     private(set) var isRunning = false
@@ -308,7 +314,7 @@ final class CompareTool {
         isRunning = true
         model.run("Compare archives", kind: .compare, inputs: [a, b], onFinish: { self.isRunning = false }) { progress in
             let r = try service.compare(a, b, mode: mode, leftOptions: options, rightOptions: options, progress: progress)
-            Task { @MainActor in self.result = r }
+            Task { @MainActor in if self.left == a, self.right == b { self.result = r } }
             return r.isIdentical ? "Identical" : "\(r.added.count + r.removed.count + r.modified.count) differences"
         }
     }

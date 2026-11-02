@@ -140,7 +140,9 @@ struct Sidebar: View {
     var body: some View {
         @Bindable var model = model
         let _ = model.operationsVersion
-        List(selection: $model.selection) {
+        // ⌘-click on the selected row would deselect it, leaving nothing highlighted while the
+        // detail still shows something; there is always a current destination.
+        List(selection: Binding(get: { model.selection }, set: { if let s = $0 { model.selection = s } })) {
             Label("Home", systemImage: "house").tag(SidebarItem.home)
             if !model.openArchives.isEmpty {
                 Section("Archives") {

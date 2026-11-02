@@ -229,7 +229,7 @@ private struct PrivacySettingsPane: View {
                 Toggle("Include full paths (otherwise names only)", isOn: $settings.historyStoresPaths)
                     .disabled(!settings.historyEnabled)
                 Toggle("Delete preview files when quitting", isOn: $settings.clearPreviewCacheOnQuit)
-                Button("Clear History") { model.history.clear() }
+                Button("Clear History") { model.clearHistory() }
             }
             Section {
                 Text("Zipper works entirely on this Mac. It has no account, analytics or advertising, and never sends file names, contents or passwords anywhere.")
@@ -373,6 +373,9 @@ struct SizeField: View {
                 .onAppear { text = display(value) }
                 .onSubmit(commit)
                 .onChange(of: focused) { _, isFocused in if !isFocused { commit() } }
+                // "Restore Defaults" changes the value from outside: show it, or committing the old
+                // text on the next focus change would silently undo the restore.
+                .onChange(of: value) { _, v in if !focused { text = display(v) } }
         }
     }
 

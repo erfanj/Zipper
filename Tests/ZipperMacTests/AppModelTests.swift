@@ -68,7 +68,8 @@ final class FormTests: XCTestCase {
 
     @MainActor
     static func makeModel() -> AppModel {
-        AppModel(platform: HeadlessPlatform(), defaults: UserDefaults(suiteName: "ZipperTests-\(UUID().uuidString)")!)
+        AppModel(platform: HeadlessPlatform(), defaults: UserDefaults(suiteName: "ZipperTests-\(UUID().uuidString)")!,
+                 supportDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("zipper-support-\(UUID().uuidString)"))
     }
 
     func testEncryptionRequiresMatchingPasswords() async {

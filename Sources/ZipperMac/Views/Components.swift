@@ -69,6 +69,9 @@ struct NewPasswordFields: View {
             .controlSize(.small)
         }
         .onChange(of: password) { _, new in if reveal { confirmation = new } }
+        // While the password is shown there's no Confirm field: what you see is what you get. Without
+        // this, a mismatch typed before showing it left "The passwords don't match" with no field to fix.
+        .onChange(of: reveal) { _, shown in if shown { confirmation = password } }
     }
 }
 

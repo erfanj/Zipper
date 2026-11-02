@@ -193,9 +193,10 @@ struct HistoryList: View {
             }
         }
         .confirmationDialog("Clear the operation history?", isPresented: $confirmClear) {
-            Button("Clear History", role: .destructive) { model.history.clear(); records = [] }
+            Button("Clear History", role: .destructive) { model.clearHistory() }
         }
-        .task(id: model.operationsVersion) { records = model.history.all() }
+        // Reloaded when an operation finishes and when history is cleared (also from Settings).
+        .task(id: model.operationsVersion &+ model.historyVersion) { records = model.history.all() }
     }
 }
 #endif

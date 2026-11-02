@@ -286,12 +286,18 @@ extension ArchiveService {
         progress.setTotal(bytes: nil, items: archives.count)
         // A password that worked is offered for the next archives, so the user isn't asked repeatedly.
         let caching = request.readOptions.passwordProvider.map { CachingPasswordProvider(upstream: $0) }
+        // "Already extracted" means the folder existed before this run. Folders this run creates
+        // don't count: "Photos.zip" and "Photos.tar.gz" are different archives, and the second
+        // must not be skipped because the first just made "Photos".
+        let existedBefore = Set(archives.map { a -> String in
+            (request.sharedDestination ?? a.deletingLastPathComponent()).appendingPathComponent(Self.baseName(for: a)).path
+        }.filter { FileManager.default.fileExists(atPath: $0) })
         for a in archives {
             try progress.checkCancelled()
             progress.setCurrentItem(a.lastPathComponent)
             let parent = request.sharedDestination ?? a.deletingLastPathComponent()
             let base = Self.baseName(for: a)
-            if request.skipAlreadyExtracted, request.folderPerArchive, FileManager.default.fileExists(atPath: parent.appendingPathComponent(base).path) {
+            if request.skipAlreadyExtracted, request.folderPerArchive, existedBefore.contains(parent.appendingPathComponent(base).path) {
                 report.items.append(.init(archive: a.lastPathComponent, status: "skipped", detail: "“\(base)” already exists", files: 0, bytes: 0))
                 progress.itemCompleted()
                 continue

@@ -314,7 +314,13 @@ final class CompressForm {
     /// Collects the sources in the background. Run from `.task(id: scanKey)`, which cancels a
     /// superseded scan, so a slow old scan can never overwrite a newer result.
     func scan() async {
-        guard !items.isEmpty else { collection = nil; return }
+        guard !items.isEmpty else {
+            // A scan superseded mid-way never cleared the flag; don't leave "Counting…" showing.
+            isScanning = false
+            collection = nil
+            recommendation = nil
+            return
+        }
         isScanning = true
         let urls = items
         let s = effectiveSettings()

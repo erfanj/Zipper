@@ -177,6 +177,9 @@ final class BrowserState: Identifiable {
         var generation: Int
     }
     @ObservationIgnored private var generation = 0
+    /// Identifies the newest load, so a slower, older one (e.g. a reload after an edit racing
+    /// "Try Again") can never overwrite it.
+    @ObservationIgnored private var loadToken = 0
 
     init(url: URL) { self.url = url }
 
@@ -188,11 +191,14 @@ final class BrowserState: Identifiable {
         let service = model.service
         let options = model.readOptions()
         let u = url
+        loadToken += 1
+        let token = loadToken
         Task {
             let r = await offMain { () -> (OpenedArchive, FolderIndex) in
                 let o = try service.open(u, options: options)
                 return (o, FolderIndex(listing: o.listing))
             }
+            guard token == loadToken else { return }
             isLoading = false
             switch r {
             case .success(let (o, idx)):
@@ -221,11 +227,15 @@ final class BrowserState: Identifiable {
 
     /// Shows a (re)loaded listing, keeping the user's place when the folder still exists (e.g. after an edit).
     func show(_ opened: OpenedArchive?, index idx: FolderIndex) {
+        // Row IDs are entry indexes, which change when the archive is rebuilt (add, rename, delete…):
+        // keeping the old IDs would highlight — and let ⌘⌫ delete — different files. Keep the
+        // selection by path instead.
+        let selectedPaths = Set(selectedRows.map(\.path))
         self.opened = opened
         index = idx
         generation += 1
         if !currentFolder.isEmpty, idx.children[currentFolder] == nil { currentFolder = "" }
-        selection = selection.filter { idx.rowsByID[$0] != nil }
+        selection = Set(idx.rowsByID.values.filter { selectedPaths.contains($0.path) }.map(\.id))
     }
 
     /// Rows for the current folder, or search results across the whole archive. Folders come first.

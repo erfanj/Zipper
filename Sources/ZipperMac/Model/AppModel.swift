@@ -88,6 +88,8 @@ final class AppModel {
 
     /// Bumped whenever an operation starts, finishes or changes state (views showing operations read it).
     var operationsVersion = 0
+    /// Bumped when the saved history changes other than through an operation (it's cleared).
+    var historyVersion = 0
 
     /// Opens a window by scene id. Provided by the main window, which owns SwiftUI's `openWindow` action.
     @ObservationIgnored var openWindow: ((String) -> Void)?
@@ -95,10 +97,12 @@ final class AppModel {
     @ObservationIgnored private var isPrompting = false
     @ObservationIgnored private var progressTimer: Timer?
 
-    init(platform: PlatformServices, defaults: UserDefaults = .standard) {
+    /// `supportDirectory` holds the history and presets files (tests pass a temporary folder so they
+    /// never touch the user's own).
+    init(platform: PlatformServices, defaults: UserDefaults = .standard, supportDirectory: URL = ProductInfo.applicationSupport) {
         self.platform = platform
         self.defaults = defaults
-        let support = ProductInfo.applicationSupport
+        let support = supportDirectory
         // Locals, not `self.settings`: @Observable properties can't be read before init completes.
         let loaded = AppSettings.load(from: defaults)
         let history = ActivityHistory(fileURL: support.appendingPathComponent("History.json"), isEnabled: loaded.historyEnabled)
@@ -136,6 +140,12 @@ final class AppModel {
     }
 
     var allPresets: [Preset] { BuiltInPresets.all + userPresets }
+
+    /// Clears the saved history; every view listing it reloads.
+    func clearHistory() {
+        history.clear()
+        historyVersion &+= 1
+    }
 
     func savePresets() {
         do { try presetStore.save(userPresets) } catch { present(ArchiveError.wrap(error), context: "Saving presets") }
@@ -182,6 +192,10 @@ final class AppModel {
         // Office documents, apps and similar packages are ZIPs inside; treat them as archives only
         // when their extension says so (e.g. .jar, .epub), never because of their content alone.
         if descriptor.category == .package, d.basis == .content { return false }
+        // Content-only detection of a ZIP in a file whose extension names something else
+        // (.docx, .xlsx, .pptx, .pages, .key, .odt, .sketch, .3mf…) means a document built on ZIP:
+        // it is detected as plain ZIP, not as a package, so the check above doesn't catch it.
+        if d.basis == .content, descriptor.effectiveContainer == .zip, !url.pathExtension.isEmpty { return false }
         return true
     }
 
