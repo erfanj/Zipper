@@ -1,4 +1,8 @@
 import XCTest
+import Foundation
+#if canImport(Glibc)
+import Glibc
+#endif
 import ArchiveCore
 import ArchiveEngines
 import ArchiverKit
@@ -55,8 +59,11 @@ final class FolderInputRegressionTests: XCTestCase {
     }
 
     func testReadErrorsBecomeArchiveErrors() throws {
-        let fh = try XCTUnwrap(FileHandle(forReadingAtPath: folder.path))
-        defer { try? fh.close() }
+        // open(2) accepts a directory on both systems (FileHandle(forReadingAtPath:) refuses it on
+        // macOS but not on Linux); reading it then fails with EISDIR.
+        let fd = open(folder.path, O_RDONLY)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        let fh = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
         XCTAssertThrowsError(try fh.readChunk(upTo: 16, path: folder.path)) { e in
             guard case .io(_, let code, let message)? = e as? ArchiveError else { return XCTFail("\(e)") }
             XCTAssertEqual(code, EISDIR)
