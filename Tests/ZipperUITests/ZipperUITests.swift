@@ -3,29 +3,29 @@ import XCTest
 /// Drives the real Zipper.app (Debug build) through its windows, menus, sidebar, sheets and
 /// keyboard shortcuts. Built by project.yml (target ZipperUITests) and run on macOS CI.
 ///
-/// Files are handed to the app with the Debug-only `-ZipperUITestOpen PATH` launch option (see
-/// UITestHooks in ZipperApp.swift), the same path as a double-click in Finder.
+/// Sample files are made by the app itself (Debug-only `-ZipperUITestOpen fixture:folder|zip`, see
+/// UITestHooks in ZipperApp.swift) and opened the way a double-click in Finder opens them. Results
+/// are checked in the app (Activity), not on disk: the test runner's own files can sit in its
+/// container, which macOS protects from other apps.
 final class ZipperUITests: XCTestCase {
     var app: XCUIApplication!
-    var work: URL!
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        work = FileManager.default.temporaryDirectory.appendingPathComponent("ZipperUITests-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         app = XCUIApplication()
         app.launchArguments = ["-ZipperUITesting", "YES", "-ApplePersistenceIgnoreState", "YES"]
     }
 
     override func tearDownWithError() throws {
         if app.state != .notRunning { app.terminate() }
-        try? FileManager.default.removeItem(at: work)
     }
 
     // MARK: Helpers
 
-    func launch(opening path: URL? = nil) {
-        if let path { app.launchArguments += ["-ZipperUITestOpen", path.path] }
+    /// `fixture` is "folder" or "zip".
+    func launch(opening fixture: String? = nil) {
+        app.launchArguments = ["-ZipperUITesting", "YES", "-ApplePersistenceIgnoreState", "YES"]
+        if let fixture { app.launchArguments += ["-ZipperUITestOpen", "fixture:" + fixture] }
         app.launch()
         XCTAssertTrue(mainWindow.waitForExistence(timeout: 20), "the main window didn't appear; windows: \(windowIDs)")
     }
@@ -54,31 +54,25 @@ final class ZipperUITests: XCTestCase {
         e.staticTexts.matching(NSPredicate(format: "value == %@ OR label == %@", s, s)).firstMatch
     }
 
+    /// Any element (cell text, button, row…) showing exactly `s`.
+    func anything(_ s: String, in e: XCUIElement) -> XCUIElement {
+        e.descendants(matching: .any).matching(NSPredicate(format: "value == %@ OR label == %@ OR title == %@", s, s, s)).firstMatch
+    }
+
+    /// An Activity row (its texts are combined into one element) mentioning `s`.
+    func activity(_ s: String) -> XCUIElement {
+        mainWindow.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", s, s)).firstMatch
+    }
+
+    func dumpOnFailure(_ ok: Bool, _ what: String, file: StaticString = #filePath, line: UInt = #line) {
+        guard !ok else { return }
+        print("UI-DUMP \(what):\n\(app.debugDescription)")
+        XCTFail(what, file: file, line: line)
+    }
+
     func waitGone(_ e: XCUIElement, _ timeout: TimeInterval = 10) -> Bool {
         let p = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: e)
         return XCTWaiter().wait(for: [p], timeout: timeout) == .completed
-    }
-
-    func makeSample() throws -> URL {
-        let folder = work.appendingPathComponent("Sample")
-        try FileManager.default.createDirectory(at: folder.appendingPathComponent("docs/sub"), withIntermediateDirectories: true)
-        try Data("# Read me\n".utf8).write(to: folder.appendingPathComponent("docs/readme.md"))
-        try Data(String(repeating: "deep ", count: 500).utf8).write(to: folder.appendingPathComponent("docs/sub/deep.txt"))
-        try Data("alpha".utf8).write(to: folder.appendingPathComponent("a.txt"))
-        return folder
-    }
-
-    func makeZip() throws -> URL {
-        let folder = try makeSample()
-        let zip = work.appendingPathComponent("Sample.zip")
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-        p.arguments = ["-c", "-k", "--keepParent", folder.path, zip.path]
-        try p.run()
-        p.waitUntilExit()
-        XCTAssertEqual(p.terminationStatus, 0)
-        try FileManager.default.removeItem(at: folder)
-        return zip
     }
 
     // MARK: Main window and sidebar
@@ -190,11 +184,13 @@ final class ZipperUITests: XCTestCase {
         menu("Tools", "Activity")
         XCTAssertTrue(mainWindow.waitForExistence(timeout: 10), "the main window didn't come back")
         XCTAssertTrue(text("Nothing Running", in: mainWindow).waitForExistence(timeout: 5))
-        // Close Tools, then the main window: the last window closing quits the app.
-        toolsWindow.click()
-        toolsWindow.typeKey("w", modifierFlags: .command)
-        XCTAssertTrue(waitGone(toolsWindow))
-        mainWindow.typeKey("w", modifierFlags: .command)
+        // Bring Tools forward from its menu (the main window now covers it), close it, then close
+        // the main window: the last window closing quits the app.
+        menu("Tools", "Repair…")
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(waitGone(toolsWindow), "⌘W didn't close the Tools window")
+        XCTAssertTrue(mainWindow.exists)
+        app.typeKey("w", modifierFlags: .command)
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 15), "closing the last window should quit")
     }
 
@@ -207,81 +203,73 @@ final class ZipperUITests: XCTestCase {
     // MARK: Archive browser
 
     func testOpenBrowseSwitchAwayComeBackAndCloseAnArchive() throws {
-        let zip = try makeZip()
-        launch(opening: zip)
+        launch(opening: "zip")
         let main = mainWindow
         XCTAssertTrue(text("Sample.zip", in: sidebar(main)).waitForExistence(timeout: 20), "the archive didn't appear in the sidebar")
-        // ditto --keepParent puts everything in "Sample"; open it, then "docs".
-        let sample = text("Sample", in: main.tables.firstMatch)
-        XCTAssertTrue(sample.waitForExistence(timeout: 20), "listing didn't load")
+        // The archive holds one folder, "Sample"; open it, then "docs".
+        let sample = anything("Sample", in: main)
+        dumpOnFailure(sample.waitForExistence(timeout: 20), "the listing didn't load")
         sample.doubleClick()
-        let docs = text("docs", in: main.tables.firstMatch)
-        XCTAssertTrue(docs.waitForExistence(timeout: 5))
+        let docs = anything("docs", in: main)
+        dumpOnFailure(docs.waitForExistence(timeout: 5), "double-clicking Sample didn't open it")
         docs.doubleClick()
-        XCTAssertTrue(text("readme.md", in: main.tables.firstMatch).waitForExistence(timeout: 5))
+        dumpOnFailure(anything("readme.md", in: main).waitForExistence(timeout: 5), "double-clicking docs didn't open it")
         // ⌘↑ goes up a level.
         main.typeKey(.upArrow, modifierFlags: .command)
-        XCTAssertTrue(text("docs", in: main.tables.firstMatch).waitForExistence(timeout: 5))
+        XCTAssertTrue(waitGone(anything("readme.md", in: main)), "⌘↑ didn't leave docs")
+        XCTAssertTrue(anything("docs", in: main).waitForExistence(timeout: 5))
         // Away to Home and Activity, and back: the archive is still there.
         text("Home", in: sidebar(main)).click()
         XCTAssertTrue(text("Drop files here to compress them, or drop an archive to open it.", in: main).waitForExistence(timeout: 5))
         text("Activity", in: sidebar(main)).click()
         XCTAssertTrue(text("Nothing Running", in: main).waitForExistence(timeout: 5))
         text("Sample.zip", in: sidebar(main)).click()
-        XCTAssertTrue(main.tables.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(anything("docs", in: main).waitForExistence(timeout: 5), "coming back lost the place in the archive")
         // Show Info (⌘I) twice: the inspector opens and closes.
         main.typeKey("i", modifierFlags: .command)
-        XCTAssertTrue(text("Engine", in: main).waitForExistence(timeout: 5), "the inspector didn't open")
+        dumpOnFailure(anything("Engine", in: main).waitForExistence(timeout: 5), "the inspector didn't open")
         main.typeKey("i", modifierFlags: .command)
-        XCTAssertTrue(waitGone(text("Engine", in: main)), "the inspector didn't close")
+        XCTAssertTrue(waitGone(anything("Engine", in: main)), "the inspector didn't close")
         // Archive › Test Integrity, then Archive › Close Archive.
         menu("Archive", "Test Integrity")
-        XCTAssertTrue(text("Verified", in: main).waitForExistence(timeout: 30), "the status bar didn't report the test result")
+        dumpOnFailure(anything("Verified", in: main).waitForExistence(timeout: 30), "the status bar didn't report the test result")
         menu("Archive", "Close Archive")
         XCTAssertTrue(waitGone(text("Sample.zip", in: sidebar(main))), "the archive is still in the sidebar")
         XCTAssertTrue(text("Drop files here to compress them, or drop an archive to open it.", in: main).waitForExistence(timeout: 5))
     }
 
-    func testExtractAllFromTheBrowserToolbar() throws {
-        let zip = try makeZip()
-        launch(opening: zip)
+    func testExtractAllWithCommandE() throws {
+        launch(opening: "zip")
         let main = mainWindow
-        XCTAssertTrue(text("Sample", in: main.tables.firstMatch).waitForExistence(timeout: 20))
+        dumpOnFailure(anything("Sample", in: main).waitForExistence(timeout: 20), "the listing didn't load")
         main.typeKey("e", modifierFlags: .command)
-        let out = work.appendingPathComponent("Sample/docs/sub/deep.txt")
-        let deadline = Date().addingTimeInterval(30)
-        while !FileManager.default.fileExists(atPath: out.path), Date() < deadline { Thread.sleep(forTimeInterval: 0.25) }
-        XCTAssertTrue(FileManager.default.fileExists(atPath: out.path), "⌘E didn't extract next to the archive")
+        text("Activity", in: sidebar(main)).click()
+        dumpOnFailure(activity("files extracted").waitForExistence(timeout: 30), "⌘E didn't extract (no finished extraction in Activity)")
+        XCTAssertTrue(activity("Extract Sample.zip").exists)
     }
 
     // MARK: Sheets
 
-    func testCompressSheetCancelsWithEscapeAndCompressesWithReturn() throws {
-        let folder = try makeSample()
-        launch(opening: folder)
-        let main = mainWindow
-        let sheet = main.sheets.firstMatch
-        XCTAssertTrue(sheet.waitForExistence(timeout: 15), "opening a folder should start the Compress sheet")
+    func testCompressSheetCancelsWithEscape() throws {
+        launch(opening: "folder")
+        let sheet = mainWindow.sheets.firstMatch
+        dumpOnFailure(sheet.waitForExistence(timeout: 15), "opening a folder should start the Compress sheet")
         XCTAssertTrue(sheet.buttons["Compress"].exists)
         sheet.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(waitGone(sheet), "Escape didn't cancel the sheet")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: work.appendingPathComponent("Sample.zip").path), "Cancel must not create anything")
-        app.terminate()
-
-        launch(opening: folder)
-        let again = mainWindow.sheets.firstMatch
-        XCTAssertTrue(again.waitForExistence(timeout: 15))
-        XCTAssertTrue(again.buttons["Compress"].isEnabled)
-        again.buttons["Compress"].click()
-        XCTAssertTrue(waitGone(again))
-        let zip = work.appendingPathComponent("Sample.zip")
-        let deadline = Date().addingTimeInterval(30)
-        while !FileManager.default.fileExists(atPath: zip.path), Date() < deadline { Thread.sleep(forTimeInterval: 0.25) }
-        XCTAssertTrue(FileManager.default.fileExists(atPath: zip.path), "Compress didn't create Sample.zip")
-        // Activity lists the finished operation.
         text("Activity", in: sidebar(mainWindow)).click()
-        // Each row combines its texts into one accessibility element.
-        let row = mainWindow.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Compress Sample' OR value CONTAINS 'Compress Sample'")).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 30), "Activity doesn't list the compression")
+        XCTAssertTrue(text("Nothing Running", in: mainWindow).waitForExistence(timeout: 5), "Cancel must not start anything")
+    }
+
+    func testCompressSheetCompressesAndActivityListsIt() throws {
+        launch(opening: "folder")
+        let sheet = mainWindow.sheets.firstMatch
+        dumpOnFailure(sheet.waitForExistence(timeout: 15), "opening a folder should start the Compress sheet")
+        let compress = sheet.buttons["Compress"]
+        XCTAssertTrue(compress.isEnabled)
+        compress.click()
+        XCTAssertTrue(waitGone(sheet))
+        text("Activity", in: sidebar(mainWindow)).click()
+        dumpOnFailure(activity("Sample.zip").waitForExistence(timeout: 30), "Activity doesn't list the new Sample.zip")
     }
 }

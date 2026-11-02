@@ -121,6 +121,7 @@ jobs:
           if ! xcodebuild test -project Zipper.xcodeproj -scheme Zipper -destination 'platform=macOS' \
                -derivedDataPath build/DerivedData -resultBundlePath build/UITests.xcresult > build/uitests.log 2>&1; then
             grep -E "error:|failed|Test Case .*(passed|failed)|Executed" build/uitests.log | tail -120
+            echo "::group::Accessibility trees at the failures"; grep -A120 "UI-DUMP" build/uitests.log | head -600; echo "::endgroup::"
             exit 1
           fi
           grep -E "Test Case .*(passed|failed)|Executed" build/uitests.log | tail -40

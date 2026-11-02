@@ -132,8 +132,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// Launch options for Tests/ZipperUITests (Debug builds only; compiled out of releases). XCUITest
 /// can't send Finder's open-document events, and Finder windows opened by "Show in Finder" would
 /// take the focus away from the app under test, so the UI tests launch with:
-///   -ZipperUITesting YES       results aren't shown in Finder and no notifications are posted
-///   -ZipperUITestOpen PATH     PATH is opened at launch, as if it was double-clicked in Finder
+///   -ZipperUITesting YES              results aren't shown in Finder and no notifications are posted
+///   -ZipperUITestOpen PATH            PATH is opened at launch, as if it was double-clicked in Finder
+///   -ZipperUITestOpen fixture:folder  the same with a sample folder (Sample/a.txt, Sample/docs/readme.md,
+///   -ZipperUITestOpen fixture:zip     Sample/docs/sub/deep.txt) or a ZIP of it, made by the app in its
+///                                     own temporary folder: files the test runner writes can sit in
+///                                     its container, which macOS protects from other apps.
 @MainActor
 enum UITestHooks {
     static func apply(to model: AppModel?) {
@@ -142,9 +146,32 @@ enum UITestHooks {
         model.settings.revealAfterCompression = false
         model.settings.notificationsEnabled = false
         model.applySettings()
-        if let path = UserDefaults.standard.string(forKey: "ZipperUITestOpen") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { model.handleOpen([URL(fileURLWithPath: path)]) }
+        guard let spec = UserDefaults.standard.string(forKey: "ZipperUITestOpen") else { return }
+        let url: URL
+        if spec.hasPrefix("fixture:") {
+            do { url = try makeFixture(String(spec.dropFirst("fixture:".count)), service: model.service) } catch {
+                model.present(ArchiveError.wrap(error), context: "UI test fixture")
+                return
+            }
+        } else {
+            url = URL(fileURLWithPath: spec)
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { model.handleOpen([url]) }
+    }
+
+    static func makeFixture(_ kind: String, service: ArchiveService) throws -> URL {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("ZipperUITest-\(UUID().uuidString)", isDirectory: true)
+        let folder = base.appendingPathComponent("Sample", isDirectory: true)
+        try fm.createDirectory(at: folder.appendingPathComponent("docs/sub"), withIntermediateDirectories: true)
+        try Data("alpha".utf8).write(to: folder.appendingPathComponent("a.txt"))
+        try Data("# Read me\n".utf8).write(to: folder.appendingPathComponent("docs/readme.md"))
+        try Data(String(repeating: "deep ", count: 500).utf8).write(to: folder.appendingPathComponent("docs/sub/deep.txt"))
+        guard kind == "zip" else { return folder }
+        _ = try service.compress(CompressRequest(items: [folder], destinationDirectory: base, archiveName: "Sample",
+                                                 settings: CompressionSettings(format: .zip)))
+        try fm.removeItem(at: folder)
+        return base.appendingPathComponent("Sample.zip")
     }
 }
 #endif
