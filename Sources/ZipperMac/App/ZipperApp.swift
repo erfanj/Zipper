@@ -50,6 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.servicesProvider = services
         NSUpdateDynamicServices()
+        #if DEBUG
+        UITestHooks.apply(to: Self.model)
+        #endif
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -124,6 +127,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let urls = Panels.chooseItemsToCompress() { model.beginCompress(urls) }
     }
 }
+
+#if DEBUG
+/// Launch options for Tests/ZipperUITests (Debug builds only; compiled out of releases). XCUITest
+/// can't send Finder's open-document events, and Finder windows opened by "Show in Finder" would
+/// take the focus away from the app under test, so the UI tests launch with:
+///   -ZipperUITesting YES       results aren't shown in Finder and no notifications are posted
+///   -ZipperUITestOpen PATH     PATH is opened at launch, as if it was double-clicked in Finder
+@MainActor
+enum UITestHooks {
+    static func apply(to model: AppModel?) {
+        guard let model, UserDefaults.standard.bool(forKey: "ZipperUITesting") else { return }
+        model.settings.revealAfterExtraction = false
+        model.settings.revealAfterCompression = false
+        model.settings.notificationsEnabled = false
+        model.applySettings()
+        if let path = UserDefaults.standard.string(forKey: "ZipperUITestOpen") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { model.handleOpen([URL(fileURLWithPath: path)]) }
+        }
+    }
+}
+#endif
 
 /// Menu-bar commands. Archive commands act on the archive shown in the main window.
 struct AppCommands: Commands {

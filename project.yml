@@ -141,6 +141,20 @@ targets:
         product: ArchiveEngines
       - package: ZipperPackage
         product: ArchiveCore
+  ZipperUITests:
+    # XCUITest: drives the Debug app's windows, menus, sheets and shortcuts (Tests/ZipperUITests).
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: Tests/ZipperUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(ZIPPER_BUNDLE_ID).uitests
+        TEST_TARGET_NAME: Zipper
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_IDENTITY: "-"
+    dependencies:
+      - target: Zipper
 schemes:
   Zipper:
     build:
@@ -148,5 +162,9 @@ schemes:
         Zipper: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - ZipperUITests
     archive:
       config: Release

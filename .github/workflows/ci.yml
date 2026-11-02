@@ -114,6 +114,16 @@ jobs:
         run: |
           swift build --build-tests
           swift test --skip-build
+      - name: UI tests (XCUITest drives the app's windows, menus and sheets)
+        timeout-minutes: 20
+        if: success()
+        run: |
+          if ! xcodebuild test -project Zipper.xcodeproj -scheme Zipper -destination 'platform=macOS' \
+               -derivedDataPath build/DerivedData -resultBundlePath build/UITests.xcresult > build/uitests.log 2>&1; then
+            grep -E "error:|failed|Test Case .*(passed|failed)|Executed" build/uitests.log | tail -120
+            exit 1
+          fi
+          grep -E "Test Case .*(passed|failed)|Executed" build/uitests.log | tail -40
       - name: Save build products
         if: always() && steps.products.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
