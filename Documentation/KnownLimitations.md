@@ -54,7 +54,20 @@ Honest list of what is not done, not verified, or not possible.
   Multithreaded zstd jobs that are already running finish in the background after a cancel; the
   operation itself returns immediately and its output is already gone. Helper processes are
   suspended with SIGSTOP. Interrupted operations are not resumable after a crash or
-  quit; they restart cleanly (temporary output is removed).
+  quit. Cancelling (or Ctrl-C in the CLI) removes partial output at once. After a crash or force
+  quit, the hidden partial files are removed by the next operation that writes to that folder (each
+  carries the ID of the process that made it; those of running processes are left alone).
+* **A killed Zipper leaves its helper running.** If the app or CLI is force-quit or crashes during
+  an operation that uses 7-Zip (or another helper), the helper process finishes its job in the
+  background before exiting; its output is discarded as above.
+* **Edits of one archive run one at a time.** Add, Rename, Delete, New Folder and "Update Archive"
+  on the same archive wait for each other, so each applies on top of the previous one. If another app
+  replaces the archive while Zipper is rebuilding it, Zipper keeps the other version and reports
+  that the change wasn't applied.
+* **Backslashes in names** are treated as folder separators when extracting, in every format
+  (archives made on Windows use them that way): `a\b.txt` extracts as `a/b.txt`. 7z archives
+  can't be created from files whose names contain a line break; Zipper says so instead of leaving
+  them out. ZIP and TAR keep such names.
 * **Metadata**: creation dates (birth times) are read from archives but not restored on extraction;
   ACLs are stored only in Mac Preservation mode and restored only by formats/engines that support
   them; sparse files are materialised (written out in full) on extraction; hard links are preserved
