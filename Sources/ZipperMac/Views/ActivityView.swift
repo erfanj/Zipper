@@ -72,10 +72,20 @@ struct OperationRow: View {
     let op: QueuedOperation
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.5)) { _ in
-            let state = op.state
-            let s = op.progress.snapshot
-            VStack(alignment: .leading, spacing: 4) {
+        // Only work that can still change is redrawn on a timer. Finished rows used to tick twice a
+        // second for as long as Activity was open, re-rendering a list that never changes.
+        // (A row moves to the Finished section, a new view, when its operation ends.)
+        if [.queued, .running, .paused].contains(op.state) {
+            TimelineView(.periodic(from: .now, by: 0.5)) { _ in row }
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
+        let state = op.state
+        let s = op.progress.snapshot
+        return VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Image(systemName: icon(state)).foregroundStyle(color(state)).frame(width: 18)
                     Text(op.title).lineLimit(1).truncationMode(.middle)
@@ -108,7 +118,6 @@ struct OperationRow: View {
                 }
             }
             .accessibilityElement(children: .combine)
-        }
     }
 
     @ViewBuilder private func controls(_ state: QueuedOperation.State) -> some View {
