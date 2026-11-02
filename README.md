@@ -10,8 +10,9 @@ SwiftUI on top of a pluggable engine layer:
 > **Status.** The core, engines, services, the `zipper` command-line tool and the app's model layer
 > are built and tested on every push (Linux CI). The macOS CI job builds the app with Xcode
 > (Quick Look extension, Finder Quick Actions and Shortcuts included), checks the bundle, and runs
-> the full test suite on macOS against the bundled libraries and 7-Zip. The UI has no automated UI
-> tests yet, so try the app before you ship it. Nothing is signed or notarized until you do it with
+> the full test suite on macOS against the bundled libraries and 7-Zip, then drives the app's windows,
+> menus, sidebar, sheets and shortcuts with XCUITest (`Tests/ZipperUITests`). Drag and drop, VoiceOver
+> and Finder integrations still need a person, so try the app before you ship it. Nothing is signed or notarized until you do it with
 > your Developer ID. See [KnownLimitations.md](Documentation/KnownLimitations.md).
 
 ## Using Zipper

@@ -72,10 +72,11 @@ On 2026-10-18, 125 tests:
 
 ## Not covered by automated tests
 
-* **The SwiftUI views, Quick Look extension, Finder Services, App Intents**: there's no XCUITest
-  suite yet. The views are compiled by the macOS CI job, not here (see
-  [KnownLimitations.md](KnownLimitations.md)). Keyboard navigation, VoiceOver, drag and drop, and
-  light/dark mode are therefore unverified. The app's model layer *is* covered (`ZipperMacTests`).
+* **Parts of the SwiftUI views, the Quick Look extension, Finder Services and App Intents.** The
+  macOS CI job runs `Tests/ZipperUITests` (XCUITest, 10 tests: windows, menus, sidebar, sheets,
+  shortcuts, browsing; see [KnownLimitations.md](KnownLimitations.md)); it needs Xcode, so it doesn't
+  run here. Drag and drop, VoiceOver and light/dark mode are unverified. The app's model layer is
+  covered here too (`ZipperMacTests`, including the `AppFlowTests` end-to-end flows).
 * **macOS-only engines and services** — Apple Archive / AEA, `hdiutil` disk images, Keychain,
   extended attributes, resource forks, quarantine propagation, iCloud placeholders, P/E-core
   scheduling and thermal handling.

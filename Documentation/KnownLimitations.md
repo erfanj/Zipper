@@ -4,14 +4,18 @@ Honest list of what is not done, not verified, or not possible.
 
 ## Not yet verified
 
-* **The app builds and runs on macOS, but most of its UI isn't covered by automated tests.** The
-  macOS CI job (`.github/workflows/ci.yml`, Xcode 16.4 on macOS 15) builds the app, the Quick Look
-  extension and the embedded `zipper` tool, verifies the signature and bundle layout, and runs the
-  whole test suite on macOS against the bundled libarchive 3.8.9 and 7-Zip. The release workflow
+* **Part of the app's UI is still only tested by hand.** The macOS CI job (`.github/workflows/ci.yml`,
+  Xcode 16.4 on macOS 15) builds the app, the Quick Look extension and the embedded `zipper` tool,
+  verifies the signature and bundle layout, runs the whole test suite on macOS against the bundled
+  libarchive 3.8.9 and 7-Zip, and then runs the XCUITest suite (`Tests/ZipperUITests`, 10 tests)
+  against the Debug app: launch, the sidebar, the Archive and Tools menus, the Tools and Settings
+  windows, closing and reopening windows, quitting, browsing an archive (folders, ⌘↑, ⌘I, Test
+  Integrity, Close), ⌘E, and the Compress sheet (cancel and compress). The release workflow
   builds the universal DMG and runs it (`Scripts/smoke-test-app.sh`): the app launches, opens an
   archive and quits cleanly, and the bundled tools round-trip an encrypted 7z on both
   architectures. Not covered by any automated test:
-  * the views' behaviour (keyboard navigation, VoiceOver, drag and drop, light and dark mode);
+  * drag and drop, Quick Look (Space) in the browser, the column and icon views, VoiceOver, and
+    light and dark mode;
   * Finder Quick Actions, Shortcuts, Dock progress and notifications at run time;
   * the Quick Look preview inside Finder;
   * the Apple Archive/AEA and `hdiutil` engines and Keychain storage, which have no tests yet.
@@ -21,8 +25,8 @@ Honest list of what is not done, not verified, or not possible.
   logic (P/E core detection via `hw.perflevel*`, QoS mapping, Low Power Mode and thermal handling)
   is implemented but unmeasured.
 * **Not signed or notarized yet.** That needs your Developer ID; see [Distribution.md](Distribution.md).
-* **UI tests** (keyboard navigation, VoiceOver, drag and drop, light/dark mode) aren't written yet.
-  They need XCUITest on macOS.
+* **UI tests don't cover** drag and drop (XCUITest can't drag from Finder), VoiceOver, or light/dark
+  mode, and open files through a Debug-only launch option rather than Finder's open event.
 
 ## Format limitations
 

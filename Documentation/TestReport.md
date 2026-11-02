@@ -47,7 +47,8 @@ Severity: **critical** = crash or data loss; **high** = wrong result the user ma
 | 14 | Low | ⌘-clicking the selected sidebar item left nothing selected while the detail still showed it. | The sidebar always has a selection. |
 | 15 | Low | Missing parts suggested a "Locate Missing Part…" command that doesn't exist. A split ZIP's edit error said "ZIP archives can't be modified in place … Convert the archive to ZIP". | Accurate text. |
 | 16 | Low | "1 KB" as a split or volume size failed with "must be at least 1 KB" (KB is decimal here; the minimum was 1,024 bytes). `split` said "1 parts". | 1 KB accepted; plural fixed. |
-| 17 | Test hygiene | The app-model tests would have written to the developer's real Application Support folder (history, presets). | `AppModel` takes a support directory; tests use a temporary one. |
+| 17 | Low | Activity redrew every row twice a second, finished operations included, for as long as it was open. | Only queued, running and paused rows redraw. |
+| 18 | Test hygiene | The app-model tests would have written to the developer's real Application Support folder (history, presets). | `AppModel` takes a support directory; tests use a temporary one. |
 
 ### Not bugs, noted
 
@@ -67,4 +68,11 @@ release checklist in [Distribution.md](Distribution.md).
 | | Before | After |
 |---|---|---|
 | Package tests (`swift test`, Linux) | 125 (3 skipped) | 187 (3 skipped), 0 failures |
-| UI tests (XCUITest, macOS CI) | none | see the CI run for this branch |
+| Package tests on macOS CI (Xcode 16.4, bundled libarchive and 7-Zip) | 125 | 187 (3 skipped), 0 failures |
+| UI tests (XCUITest, macOS CI) | none | 10, 0 failures |
+
+The UI suite took four CI rounds to settle. Every failure on the way was in the tests, not the app:
+a window clicked while another covered it; sample files written by the test runner, whose container
+macOS protects from other apps (the app now makes its own, Debug builds only); and a query that asked
+`CONTAINS` of numeric values, which XCTest reports as a time-out. Final run:
+[CI #19](https://github.com/erfanj/Zipper/actions/runs/41496372931).
