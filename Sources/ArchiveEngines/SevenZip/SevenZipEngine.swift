@@ -503,7 +503,7 @@ public final class SevenZipEngine: ArchiveEngine, @unchecked Sendable {
         // Group items by base directory: 7-Zip stores paths relative to its working directory.
         let groups = Dictionary(grouping: request.items, by: { $0.baseDirectory.path })
         let outDir = request.output.deletingLastPathComponent()
-        let tempName = ".\(request.output.lastPathComponent).ua-\(UInt32.random(in: 0...UInt32.max))"
+        let tempName = ".\(request.output.lastPathComponent).ua-\(TempToken.make())"
         let tempURL = outDir.appendingPathComponent(tempName)
         var cleanup = [URL]()
         defer { for u in cleanup { try? FileManager.default.removeItem(at: u) } }
@@ -522,6 +522,12 @@ public final class SevenZipEngine: ArchiveEngine, @unchecked Sendable {
                 let rel = relativePath(item.url, to: URL(fileURLWithPath: base))
                 if item.type == .directory, dirsWithChildren.contains(item.archivePath) { return nil }
                 return rel
+            }
+            // 7-Zip reads the list one name per line, so a name with a line break would be silently left
+            // out of the archive. Refuse instead of losing it.
+            if let bad = paths.first(where: { $0.contains(where: { $0 == "\n" || $0 == "\r" }) }) {
+                throw ArchiveError.operationNotSupported(format: request.format, operation: "this file name",
+                    reason: "“\((bad as NSString).lastPathComponent.replacingOccurrences(of: "\n", with: "⏎"))” contains a line break, which 7-Zip can't take from \(ProductInfo.name). Rename it, or choose ZIP (without splitting or encryption) or a TAR format.")
             }
             try Self.writeListFile(paths, to: listURL)
             if i > 0, settings.splitVolumeSize != nil {

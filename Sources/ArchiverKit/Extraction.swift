@@ -149,6 +149,7 @@ extension ArchiveService {
             throw ArchiveError.permissionDenied(path: parent.path)
         }
         guard fm.isWritableFile(atPath: parent.path) else { throw ArchiveError.permissionDenied(path: parent.path) }
+        Leftovers.sweep(parent)
         var warnings: [String] = []
 
         // Optional listing: cheap for indexed formats; required for verification.
@@ -180,7 +181,7 @@ extension ArchiveService {
         let engineID: EngineID
         do {
             (_, engineID) = try withEngines(for: detection.format, req, notes: &notes) { engine -> Void in
-                let staging = parent.appendingPathComponent(".ua-extract-\(UUID().uuidString)", isDirectory: true)
+                let staging = parent.appendingPathComponent(".ua-extract-\(TempToken.make())", isDirectory: true)
                 try fm.createDirectory(at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
                 do {
                     var stageOptions = options

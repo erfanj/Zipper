@@ -325,7 +325,7 @@ public final class SafeExtractionSink: ExtractionSink {
             }
         }
 
-        let tmp = ".ua-\(POSIX.randomToken()).partial"
+        let tmp = ".ua-\(TempToken.make()).partial"
         let fd = POSIX.createExclusive(at: parentFD, tmp)
         guard fd >= 0 else {
             let code = errno

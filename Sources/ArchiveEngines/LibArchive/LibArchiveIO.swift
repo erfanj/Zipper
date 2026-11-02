@@ -228,7 +228,7 @@ final class AtomicOutputFile {
     init(_ url: URL) throws {
         finalURL = url
         let dir = url.deletingLastPathComponent()
-        tempURL = dir.appendingPathComponent(".\(url.lastPathComponent).ua-\(UInt32.random(in: 0...UInt32.max)).partial")
+        tempURL = dir.appendingPathComponent(".\(url.lastPathComponent).ua-\(TempToken.make()).partial")
         fd = open(tempURL.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o644)
         guard fd >= 0 else {
             let e = errno

@@ -49,8 +49,19 @@ extension ArchiveService {
     /// Applies edits transactionally: the result is built in a temporary file next to the original,
     /// verified (full decode + expected file list), and only then atomically swapped in. If anything
     /// fails, the original is untouched.
+    ///
+    /// Edits of the same archive run one at a time (each applies on top of the previous one; they
+    /// used to rebuild from the same original, and the last to finish discarded the others), and an
+    /// archive changed by another program while it was being rebuilt is never overwritten.
     public func modify(_ request: ModifyRequest, progress: OperationProgress = OperationProgress()) throws -> ModifyOutcome {
+        try ArchiveEditLock.shared.withLock(for: request.archive, progress: progress) {
+            try modifyLocked(request, progress: progress)
+        }
+    }
+
+    private func modifyLocked(_ request: ModifyRequest, progress: OperationProgress) throws -> ModifyOutcome {
         let fm = FileManager.default
+        let before = FileIdentity(request.archive)
         let opened = try open(request.archive, options: request.readOptions, progress: OperationProgress())
         let format = opened.detection.format
         var warnings: [String] = []
@@ -127,17 +138,18 @@ extension ArchiveService {
             default:
                 throw ArchiveError.notEditable(format: format, reason: "Encrypted archives of this type can't be rebuilt.")
             }
-            return try rebuild(request, opened: opened, settings: settings, password: pw, expected: expected, warnings: warnings, progress: progress)
+            return try rebuild(request, opened: opened, settings: settings, password: pw, expected: expected, warnings: warnings, before: before, progress: progress)
         }
-        return try rebuild(request, opened: opened, settings: settings, password: nil, expected: expected, warnings: warnings, progress: progress)
+        return try rebuild(request, opened: opened, settings: settings, password: nil, expected: expected, warnings: warnings, before: before, progress: progress)
     }
 
     private func rebuild(_ request: ModifyRequest, opened: OpenedArchive, settings: CompressionSettings, password: Secret?,
-                         expected: Set<String>, warnings: [String], progress: OperationProgress) throws -> ModifyOutcome {
+                         expected: Set<String>, warnings: [String], before: FileIdentity, progress: OperationProgress) throws -> ModifyOutcome {
         let fm = FileManager.default
         let dir = request.archive.deletingLastPathComponent()
         guard fm.isWritableFile(atPath: dir.path) else { throw ArchiveError.permissionDenied(path: dir.path) }
-        let work = dir.appendingPathComponent(".ua-modify-\(UUID().uuidString)", isDirectory: true)
+        Leftovers.sweep(dir)
+        let work = dir.appendingPathComponent(".ua-modify-\(TempToken.make())", isDirectory: true)
         try fm.createDirectory(at: work, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer { try? fm.removeItem(at: work) }
         let tree = work.appendingPathComponent("tree", isDirectory: true)
@@ -232,6 +244,8 @@ extension ArchiveService {
 
         // 5. Atomically swap it in (the original survives any failure up to this point).
         // rename(2) replaces the original atomically: readers see either the old or the new archive.
+        // Not if someone else saved a new version meanwhile: that would silently undo their change.
+        guard FileIdentity(request.archive) == before else { throw ArchiveError.changedDuringEdit(path: request.archive.path) }
         guard rename(tempArchive.path, request.archive.path) == 0 else {
             throw ArchiveError.io(path: request.archive.path, code: errno, message: String(cString: strerror(errno)))
         }
@@ -280,4 +294,45 @@ public final class ExternalEditSession: @unchecked Sendable {
     }
 
     deinit { discard() }
+}
+
+/// What identifies one version of a file: replacing or rewriting it changes at least one of these.
+struct FileIdentity: Equatable {
+    var size: UInt64?
+    var modified: Date?
+    var fileNumber: UInt64?
+
+    init(_ url: URL) {
+        let a = try? FileManager.default.attributesOfItem(atPath: url.path)
+        size = (a?[.size] as? NSNumber)?.uint64Value
+        modified = a?[.modificationDate] as? Date
+        fileNumber = (a?[.systemFileNumber] as? NSNumber)?.uint64Value
+    }
+}
+
+/// Serializes edits per archive (by resolved path) within this process.
+final class ArchiveEditLock: @unchecked Sendable {
+    static let shared = ArchiveEditLock()
+    private let condition = NSCondition()
+    private var held = Set<String>()
+
+    func withLock<T>(for archive: URL, progress: OperationProgress, _ body: () throws -> T) throws -> T {
+        let key = archive.resolvingSymlinksInPath().standardizedFileURL.path
+        condition.lock()
+        var announced = false
+        while held.contains(key) {
+            if !announced { progress.setPhase("Waiting for another change to this archive"); announced = true }
+            if progress.isCancelled { condition.unlock(); throw ArchiveError.cancelled }
+            _ = condition.wait(until: Date().addingTimeInterval(0.25))
+        }
+        held.insert(key)
+        condition.unlock()
+        defer {
+            condition.lock()
+            held.remove(key)
+            condition.broadcast()
+            condition.unlock()
+        }
+        return try body()
+    }
 }

@@ -94,6 +94,7 @@ extension ArchiveService {
         let engine = try creationEngine(format: settings.format, settings: settings)
         let destDir = request.destinationDirectory ?? request.items[0].deletingLastPathComponent()
         guard FileManager.default.isWritableFile(atPath: destDir.path) else { throw ArchiveError.permissionDenied(path: destDir.path) }
+        Leftovers.sweep(destDir)
 
         var outcome = CompressionOutcome(archives: [], excluded: [], unreadable: [], warnings: warnings, trashedSources: [])
         let groups = Self.groups(request.items, grouping: settings.grouping)

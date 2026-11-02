@@ -42,6 +42,8 @@ public enum ArchiveError: Error, Sendable, Equatable {
     case invalidArgument(String)
     case verificationFailed(details: String)
     case notEditable(format: FormatID, reason: String)
+    /// The archive was replaced or rewritten by someone else while an edit was being built.
+    case changedDuringEdit(path: String)
     case internalError(String)
 
     /// Short title suitable for an alert.
@@ -73,6 +75,7 @@ public enum ArchiveError: Error, Sendable, Equatable {
         case .invalidArgument: return "Invalid settings"
         case .verificationFailed: return "Verification failed"
         case .notEditable: return "This archive can't be edited"
+        case .changedDuringEdit: return "The archive was changed elsewhere"
         case .internalError: return "Unexpected error"
         }
     }
@@ -133,6 +136,8 @@ public enum ArchiveError: Error, Sendable, Equatable {
             return "The result did not pass verification. \(d)"
         case .notEditable(let f, let reason):
             return "This \(FormatCatalog.descriptor(for: f)?.name ?? f.rawValue) archive can't be changed. \(reason)"
+        case .changedDuringEdit(let p):
+            return "“\(Self.name(p))” was changed by another app while \(ProductInfo.name) was updating it. Your change wasn't applied, so the other version is kept."
         case .internalError(let m):
             return "An unexpected internal error occurred: \(m)"
         }
@@ -160,6 +165,8 @@ public enum ArchiveError: Error, Sendable, Equatable {
             return ["Free up disk space or choose a destination on another disk."]
         case .permissionDenied:
             return ["Choose a different destination, or grant access in System Settings › Privacy & Security."]
+        case .changedDuringEdit:
+            return ["Open the archive again to see the current version, then repeat your change."]
         case .notEditable:
             return ["Convert it to a single ZIP or 7z archive (Tools › Convert), then edit the converted copy."]
         default:
@@ -196,6 +203,7 @@ public enum ArchiveError: Error, Sendable, Equatable {
         case .invalidArgument: return "invalid-argument"
         case .verificationFailed: return "verification-failed"
         case .notEditable: return "not-editable"
+        case .changedDuringEdit: return "changed-during-edit"
         case .internalError: return "internal"
         }
     }

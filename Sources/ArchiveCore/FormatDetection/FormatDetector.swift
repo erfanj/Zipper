@@ -91,6 +91,9 @@ public enum FormatDetector {
         let contentURL = multipart?.firstVolume ?? url
         let readURL = FileManager.default.fileExists(atPath: contentURL.path) ? contentURL : (multipart?.volumes.first ?? url)
         let sample = try readSample(readURL)
+        // No format is zero bytes long (even an empty ZIP or tar has a header); an empty file named
+        // ".zip" used to open as an empty archive.
+        if sample.size == 0 { return nil }
         let (strong, weak) = contentMatches(sample)
 
         // Extension: for multipart sets use the implied format / base name.

@@ -166,7 +166,7 @@ public final class AppleArchiveEngine: ArchiveEngine, @unchecked Sendable {
         // Mirror the selection as a tree of hard links so filters and archive paths are honoured
         // exactly, without copying file data.
         let mirrorParent = request.output.deletingLastPathComponent()
-        let mirror = mirrorParent.appendingPathComponent(".ua-aa-\(UUID().uuidString)")
+        let mirror = mirrorParent.appendingPathComponent(".ua-aa-\(TempToken.make())")
         try FileManager.default.createDirectory(at: mirror, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: mirror) }
         for item in request.items {
@@ -187,7 +187,7 @@ public final class AppleArchiveEngine: ArchiveEngine, @unchecked Sendable {
             }
         }
 
-        let temp = mirrorParent.appendingPathComponent(".\(request.output.lastPathComponent).ua-\(UInt32.random(in: 0...UInt32.max))")
+        let temp = mirrorParent.appendingPathComponent(".\(request.output.lastPathComponent).ua-\(TempToken.make())")
         guard let file = ArchiveByteStream.fileStream(path: FilePath(temp.path), mode: .writeOnly, options: [.create, .truncate],
                                                       permissions: FilePermissions(rawValue: 0o644)) else {
             throw ArchiveError.permissionDenied(path: mirrorParent.path)

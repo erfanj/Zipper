@@ -41,6 +41,7 @@ public enum FileSplitter {
         defer { try? input.close() }
         let size = (try FileManager.default.attributesOfItem(atPath: file.path)[.size] as? UInt64) ?? 0
         let outDir = dir ?? file.deletingLastPathComponent()
+        Leftovers.sweep(outDir)
         let count = max(1, Int((size + partSize - 1) / partSize))
         let digits = max(3, String(count).count)
         progress.setTotal(bytes: size, items: count)
@@ -102,7 +103,8 @@ public enum FileSplitter {
         }
         guard set.isComplete else { throw ArchiveError.missingVolume(expected: set.missing) }
         let out = output ?? ArchiveService.uniqueURL(in: set.directory, name: set.baseName)
-        let temp = out.deletingLastPathComponent().appendingPathComponent(".\(out.lastPathComponent).ua-partial")
+        Leftovers.sweep(out.deletingLastPathComponent())
+        let temp = out.deletingLastPathComponent().appendingPathComponent(".\(out.lastPathComponent).ua-\(TempToken.make()).partial")
         FileManager.default.createFile(atPath: temp.path, contents: nil)
         guard let fh = FileHandle(forWritingAtPath: temp.path) else { throw ArchiveError.permissionDenied(path: temp.path) }
         let hasher = StreamingHasher(.sha256)

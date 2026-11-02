@@ -60,7 +60,7 @@ public final class RarEngine: ArchiveEngine, @unchecked Sendable {
             throw ArchiveError.invalidArgument("RAR archives must be created from items in a single folder.")
         }
         let outDir = request.output.deletingLastPathComponent()
-        let temp = outDir.appendingPathComponent(".\(request.output.deletingPathExtension().lastPathComponent).ua-\(UInt32.random(in: 0...UInt32.max)).rar")
+        let temp = outDir.appendingPathComponent(".\(request.output.deletingPathExtension().lastPathComponent).ua-\(TempToken.make()).rar")
         let list = FileManager.default.temporaryDirectory.appendingPathComponent("ua-rar-\(UUID().uuidString).lst")
         defer { try? FileManager.default.removeItem(at: list) }
         let dirsWithChildren = Set(items.map { ($0.archivePath as NSString).deletingLastPathComponent })
@@ -106,7 +106,7 @@ public final class RarEngine: ArchiveEngine, @unchecked Sendable {
     /// Runs `rar r` (repair) on a copy, writing the reconstructed archive next to it.
     public func repair(_ archive: URL, outputDirectory: URL, progress: OperationProgress) throws -> URL? {
         guard let exe = executable else { throw ArchiveError.engineUnavailable(.rar, reason: descriptor.unavailableReason ?? "") }
-        let work = outputDirectory.appendingPathComponent(".ua-rar-repair-\(UUID().uuidString)")
+        let work = outputDirectory.appendingPathComponent(".ua-rar-repair-\(TempToken.make())")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: work) }
         let copy = work.appendingPathComponent(archive.lastPathComponent)

@@ -155,7 +155,8 @@ enum ZipRebuilder {
         le32(UInt32(min(cdOffset, 0xFFFFFFFF)), &eocd)
         le16(0, &eocd)
         out.append(eocd)
-        let temp = output.deletingLastPathComponent().appendingPathComponent(".\(output.lastPathComponent).ua-partial")
+        Leftovers.sweep(output.deletingLastPathComponent())
+        let temp = output.deletingLastPathComponent().appendingPathComponent(".\(output.lastPathComponent).ua-\(TempToken.make()).partial")
         try out.write(to: temp)
         guard !FileManager.default.fileExists(atPath: output.path) else {
             try? FileManager.default.removeItem(at: temp)

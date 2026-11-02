@@ -100,7 +100,8 @@ extension ArchiveService {
         if let total = opened.listing.totalUncompressedSize, let free = Self.freeSpace(at: destDir), total * 2 > free {
             throw ArchiveError.insufficientSpace(needed: total * 2, available: free)
         }
-        let work = destDir.appendingPathComponent(".ua-convert-\(UUID().uuidString)", isDirectory: true)
+        Leftovers.sweep(destDir)
+        let work = destDir.appendingPathComponent(".ua-convert-\(TempToken.make())", isDirectory: true)
         try fm.createDirectory(at: work, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer { try? fm.removeItem(at: work) }
 

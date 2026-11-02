@@ -207,7 +207,7 @@ final class StagingDirectory {
 
     init(near destination: URL) throws {
         let parent = FileManager.default.isWritableFile(atPath: destination.path) ? destination : FileManager.default.temporaryDirectory
-        url = parent.appendingPathComponent(".ua-staging-\(UUID().uuidString)", isDirectory: true)
+        url = parent.appendingPathComponent(".ua-staging-\(TempToken.make())", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
     }
 

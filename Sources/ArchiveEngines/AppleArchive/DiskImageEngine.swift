@@ -115,7 +115,7 @@ public final class DiskImageEngine: ArchiveEngine, @unchecked Sendable {
     public func create(_ request: CreateRequest, progress: OperationProgress) throws -> CreateResult {
         let s = request.settings
         let parent = request.output.deletingLastPathComponent()
-        let src = parent.appendingPathComponent(".ua-dmg-\(UUID().uuidString)")
+        let src = parent.appendingPathComponent(".ua-dmg-\(TempToken.make())")
         try FileManager.default.createDirectory(at: src, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: src) }
         for item in request.items {
@@ -135,7 +135,7 @@ public final class DiskImageEngine: ArchiveEngine, @unchecked Sendable {
         case .lzma?: format = "ULMO"
         default: format = "UDZO"
         }
-        let temp = parent.appendingPathComponent(".\(request.output.deletingPathExtension().lastPathComponent).ua-\(UInt32.random(in: 0...UInt32.max)).dmg")
+        let temp = parent.appendingPathComponent(".\(request.output.deletingPathExtension().lastPathComponent).ua-\(TempToken.make()).dmg")
         var args = ["create", "-quiet", "-fs", "APFS", "-format", format, "-volname", request.output.deletingPathExtension().lastPathComponent,
                     "-srcfolder", src.path]
         if s.encryption != nil {
