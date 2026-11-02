@@ -347,7 +347,7 @@ public final class LibArchiveEngine: ArchiveEngine, @unchecked Sendable {
     func rawEntryName(_ s: ArchiveSource) -> String {
         // uuencode / xxencode record the original name in their "begin MODE NAME" line.
         if FormatCatalog.descriptor(for: s.format)?.kind == .encoding, let fh = FileHandle(forReadingAtPath: s.url.path) {
-            let head = String(decoding: fh.readData(ofLength: 4096), as: UTF8.self)
+            let head = String(decoding: (try? fh.readChunk(upTo: 4096, path: s.url.path)) ?? Data(), as: UTF8.self)
             try? fh.close()
             for line in head.split(whereSeparator: \.isNewline) where line.hasPrefix("begin ") {
                 let parts = line.split(separator: " ", maxSplits: 2)

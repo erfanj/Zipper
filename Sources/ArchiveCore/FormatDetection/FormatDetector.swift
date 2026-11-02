@@ -42,18 +42,16 @@ public enum FormatDetector {
     }
 
     static func readSample(_ url: URL, headBytes: Int = 0x8800) throws -> Sample {
-        guard let fh = FileHandle(forReadingAtPath: url.path) else {
-            if !FileManager.default.fileExists(atPath: url.path) { throw ArchiveError.fileNotFound(path: url.path) }
-            throw ArchiveError.permissionDenied(path: url.path)
-        }
+        // A folder is never an archive (and reading one fails with EISDIR).
+        let fh = try SafeFileIO.openForReading(url)
         defer { try? fh.close() }
-        let head = [UInt8](fh.readData(ofLength: headBytes))
-        let size = fh.seekToEndOfFile()
+        let head = [UInt8](try fh.readChunk(upTo: headBytes, path: url.path))
+        let size = try fh.seekToEndChecked(path: url.path)
         var tail: [UInt8] = []
         if size > UInt64(head.count) {
             let n = UInt64(min(1024, size))
-            fh.seek(toFileOffset: size - n)
-            tail = [UInt8](fh.readData(ofLength: Int(n)))
+            try fh.seekChecked(to: size - n, path: url.path)
+            tail = [UInt8](try fh.readChunk(upTo: Int(n), path: url.path))
         } else {
             tail = Array(head.suffix(1024))
         }

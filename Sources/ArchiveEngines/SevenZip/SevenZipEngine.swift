@@ -492,7 +492,7 @@ public final class SevenZipEngine: ArchiveEngine, @unchecked Sendable {
             needsPassword = true
         }
         if let v = settings.splitVolumeSize {
-            guard v >= 1024 else { throw ArchiveError.invalidArgument("Volumes must be at least 1 KB.") }
+            guard v >= 1_000 else { throw ArchiveError.invalidArgument("Volumes must be at least 1 KB.") }
             args.append("-v\(v)b")
         }
         if let c = settings.comment, container == .zip, !c.isEmpty {

@@ -211,8 +211,8 @@ final class BrowserState: Identifiable {
         guard let path = ProcessInfo.processInfo.environment["ZIPPER_SMOKE_REPORT"], !path.isEmpty else { return }
         let data = Data((line + "\n").utf8)
         if let handle = FileHandle(forWritingAtPath: path) {
-            handle.seekToEndOfFile()
-            handle.write(data)
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
             try? handle.close()
         } else {
             _ = FileManager.default.createFile(atPath: path, contents: data)

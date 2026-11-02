@@ -235,7 +235,7 @@ public extension ExtractionSink {
         defer { try? fh.close() }
         do {
             while true {
-                let chunk = fh.readData(ofLength: 1 << 20)
+                let chunk = try fh.readChunk(upTo: 1 << 20, path: url.path)
                 if chunk.isEmpty { break }
                 try chunk.withUnsafeBytes { try writer.write($0) }
             }

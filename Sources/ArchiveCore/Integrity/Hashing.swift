@@ -122,14 +122,14 @@ public final class StreamingHasher {
 
     /// Hashes a file using bounded memory.
     public static func hashFile(at url: URL, algorithm: HashAlgorithm, progress: OperationProgress? = nil) throws -> String {
-        guard let handle = FileHandle(forReadingAtPath: url.path) else {
-            throw FileManager.default.fileExists(atPath: url.path) ? ArchiveError.permissionDenied(path: url.path) : ArchiveError.fileNotFound(path: url.path)
+        let handle = try SafeFileIO.openForReading(url) {
+            ArchiveError.invalidArgument("“\(($0 as NSString).lastPathComponent)” is a folder. Checksums are calculated for files.")
         }
         defer { try? handle.close() }
         let hasher = StreamingHasher(algorithm)
         while true {
             try progress?.checkCancelled()
-            let chunk = handle.readData(ofLength: 1 << 20)
+            let chunk = try handle.readChunk(upTo: 1 << 20, path: url.path)
             if chunk.isEmpty { break }
             hasher.update(chunk)
             progress?.add(processed: UInt64(chunk.count))

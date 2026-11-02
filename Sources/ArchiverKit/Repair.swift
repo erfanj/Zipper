@@ -310,13 +310,18 @@ extension ArchiveService {
 /// Finder, Windows Explorer, unzip — cannot, so a missing or damaged directory is reported.
 enum ZipStructure {
     static func problems(_ url: URL) -> [String] {
-        guard let fh = FileHandle(forReadingAtPath: url.path) else { return [] }
+        guard !SafeFileIO.isDirectory(url), let fh = FileHandle(forReadingAtPath: url.path) else { return [] }
         defer { try? fh.close() }
-        let size = fh.seekToEndOfFile()
+        // A read error is not structural damage: report nothing here and let the decoder report it.
+        return (try? check(fh, url.path)) ?? []
+    }
+
+    private static func check(_ fh: FileHandle, _ path: String) throws -> [String] {
+        let size = try fh.seekToEndChecked(path: path)
         guard size >= 22 else { return ["The file is too small to be a ZIP archive."] }
         let tailLen = min(size, 65_557)
-        fh.seek(toFileOffset: size - tailLen)
-        let tail = [UInt8](fh.readData(ofLength: Int(tailLen)))
+        try fh.seekChecked(to: size - tailLen, path: path)
+        let tail = [UInt8](try fh.readChunk(upTo: Int(tailLen), path: path))
         var eocd = -1
         var i = tail.count - 22
         while i >= 0 {
@@ -335,8 +340,8 @@ enum ZipStructure {
                 return ["The ZIP64 end-of-directory locator is missing or damaged."]
             }
             let loc = u32(tail, eocd - 20 + 8) | u32(tail, eocd - 20 + 12) << 32
-            fh.seek(toFileOffset: loc)
-            let rec = [UInt8](fh.readData(ofLength: 56))
+            try fh.seekChecked(to: loc, path: path)
+            let rec = [UInt8](try fh.readChunk(upTo: 56, path: path))
             guard rec.count == 56, rec[0] == 0x50, rec[1] == 0x4B, rec[2] == 0x06, rec[3] == 0x06 else { return ["The ZIP64 end-of-directory record is damaged."] }
             cdSize = u32(rec, 40) | u32(rec, 44) << 32
             cdOffset = u32(rec, 48) | u32(rec, 52) << 32
@@ -345,13 +350,13 @@ enum ZipStructure {
         guard cdOffset + cdSize <= eocdAbs else {
             return ["The central directory points beyond the end of the file — the archive is truncated or damaged."]
         }
-        fh.seek(toFileOffset: cdOffset)
-        let sig = [UInt8](fh.readData(ofLength: 4))
+        try fh.seekChecked(to: cdOffset, path: path)
+        let sig = [UInt8](try fh.readChunk(upTo: 4, path: path))
         if sig == [0x50, 0x4B, 0x01, 0x02] || cdSize == 0 { return [] }
         // Data prepended to the archive (self-extractors) shifts offsets; accept a directory found by size.
         if eocdAbs >= cdSize {
-            fh.seek(toFileOffset: eocdAbs - cdSize)
-            if [UInt8](fh.readData(ofLength: 4)) == [0x50, 0x4B, 0x01, 0x02] { return [] }
+            try fh.seekChecked(to: eocdAbs - cdSize, path: path)
+            if [UInt8](try fh.readChunk(upTo: 4, path: path)) == [0x50, 0x4B, 0x01, 0x02] { return [] }
         }
         return ["The ZIP's central directory is damaged."]
     }

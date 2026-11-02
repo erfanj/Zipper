@@ -97,8 +97,8 @@ public enum CompressionAdvisor {
             if let fh = FileHandle(forReadingAtPath: f.url.path) {
                 let want = min(perFileSample, sampleBudget - sample.count)
                 // Read from the middle of large files to avoid header-only bias.
-                if f.size > UInt64(want * 4) { fh.seek(toFileOffset: f.size / 2) }
-                sample.append(fh.readData(ofLength: want))
+                if f.size > UInt64(want * 4) { try? fh.seekChecked(to: f.size / 2, path: f.url.path) }
+                if let d = try? fh.readChunk(upTo: want, path: f.url.path) { sample.append(d) }
                 try? fh.close()
             }
             i += stride

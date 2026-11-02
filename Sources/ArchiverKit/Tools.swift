@@ -34,8 +34,10 @@ public enum FileSplitter {
 
     public static func split(_ file: URL, partSize: UInt64, into dir: URL? = nil, writeManifest: Bool = true,
                              progress: OperationProgress = OperationProgress()) throws -> SplitResult {
-        guard partSize >= 1024 else { throw ArchiveError.invalidArgument("Parts must be at least 1 KB.") }
-        guard let input = FileHandle(forReadingAtPath: file.path) else { throw ArchiveError.fileNotFound(path: file.path) }
+        guard partSize >= 1_000 else { throw ArchiveError.invalidArgument("Parts must be at least 1 KB.") }
+        let input = try SafeFileIO.openForReading(file) {
+            ArchiveError.invalidArgument("“\(($0 as NSString).lastPathComponent)” is a folder. Compress it first, then split the archive.")
+        }
         defer { try? input.close() }
         let size = (try FileManager.default.attributesOfItem(atPath: file.path)[.size] as? UInt64) ?? 0
         let outDir = dir ?? file.deletingLastPathComponent()
@@ -58,9 +60,9 @@ public enum FileSplitter {
                 var remaining = partSize
                 while remaining > 0 {
                     try progress.checkCancelled()
-                    let chunk = input.readData(ofLength: Int(min(remaining, 4 << 20)))
+                    let chunk = try input.readChunk(upTo: Int(min(remaining, 4 << 20)), path: file.path)
                     if chunk.isEmpty { break }
-                    out.write(chunk)
+                    try out.writeChunk(chunk, path: url.path)
                     whole.update(chunk)
                     ph.update(chunk)
                     remaining -= UInt64(chunk.count)
@@ -113,9 +115,9 @@ public enum FileSplitter {
                 defer { try? input.close() }
                 while true {
                     try progress.checkCancelled()
-                    let chunk = input.readData(ofLength: 4 << 20)
+                    let chunk = try input.readChunk(upTo: 4 << 20, path: v.path)
                     if chunk.isEmpty { break }
-                    fh.write(chunk)
+                    try fh.writeChunk(chunk, path: temp.path)
                     hasher.update(chunk)
                     progress.add(processed: UInt64(chunk.count))
                 }

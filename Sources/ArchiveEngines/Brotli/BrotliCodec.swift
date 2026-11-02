@@ -45,10 +45,11 @@ final class BrotliDecoder {
     private(set) var finished = false
     private(set) var compressedRead: UInt64 = 0
     private var eofInput = false
+    private let path: String
 
     init(url: URL) throws {
-        guard let fh = FileHandle(forReadingAtPath: url.path) else { throw ArchiveError.fileNotFound(path: url.path) }
-        handle = fh
+        handle = try SafeFileIO.openForReading(url)
+        path = url.path
         guard let s = BrotliDecoderCreateInstance(nil, nil, nil) else { throw ArchiveError.internalError("Brotli decoder allocation failed") }
         state = s
     }
@@ -63,7 +64,7 @@ final class BrotliDecoder {
         if finished { return 0 }
         while true {
             if inputOffset >= input.count, !eofInput {
-                let d = handle.readData(ofLength: 1 << 16)
+                let d = try handle.readChunk(upTo: 1 << 16, path: path)
                 if d.isEmpty { eofInput = true } else {
                     input = [UInt8](d)
                     inputOffset = 0
