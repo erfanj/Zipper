@@ -1293,3 +1293,78 @@ final class BrowserRobustnessTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Nothing outlives its use (the app runs for days)
+
+final class LifetimeTests: AppFlowTestCase {
+    func testArchiveServiceIsFreedAfterUse() throws {
+        weak var weakService: ArchiveService?
+        try {
+            let service = ArchiveService()
+            weakService = service
+            let out = dir.appendingPathComponent("lifetime", isDirectory: true)
+            _ = try service.compress(CompressRequest(items: [source], destinationDirectory: out.deletingLastPathComponent(),
+                                                     archiveName: "life", settings: CompressionSettings(format: .zip)))
+            _ = try service.extract(ExtractRequest(archive: zip, destination: out))
+            _ = try service.test(tarGz)
+            _ = try service.modify(ModifyRequest(archive: dir.appendingPathComponent("life.zip"), edits: [.createFolder(path: "x")]))
+        }()
+        XCTAssertNil(weakService, "ArchiveService (and its engines) leaked")
+    }
+
+    /// Compressing linked the operation's progress and a per-archive child progress both ways (a
+    /// retain cycle), so every compression — finished or cancelled — leaked both, with their handlers.
+    func testCompressionFreesItsProgressObjects() throws {
+        let big = dir.appendingPathComponent("big", isDirectory: true)
+        try FileManager.default.createDirectory(at: big, withIntermediateDirectories: true)
+        var rng = SystemRandomNumberGenerator()
+        try Data((0..<(24 << 20)).map { _ in UInt8.random(in: 0...255, using: &rng) }).write(to: big.appendingPathComponent("r.bin"))
+        for cancelMidway in [false, true] {
+            weak var weakProgress: OperationProgress?
+            try {
+                let p = OperationProgress()
+                weakProgress = p
+                if cancelMidway { DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { p.cancel() } }
+                let request = CompressRequest(items: [cancelMidway ? big : source], destinationDirectory: dir,
+                                              archiveName: "p\(cancelMidway)", settings: CompressionSettings(format: .tarBzip2, level: 9))
+                if cancelMidway {
+                    XCTAssertThrowsError(try ArchiveService().compress(request, progress: p))
+                } else {
+                    _ = try ArchiveService().compress(request, progress: p)
+                }
+            }()
+            // After a cancellation the libarchive handle is closed on a background queue.
+            let deadline = Date().addingTimeInterval(10)
+            while weakProgress != nil, Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
+            XCTAssertNil(weakProgress, "the progress object leaked (cancelled midway: \(cancelMidway))")
+        }
+    }
+
+    func testAppModelIsFreedAfterOpeningEditingAndClosing() async throws {
+        weak var weakModel: AppModel?
+        weak var weakState: BrowserState?
+        do {
+            let model = await MainActor.run { makeModel() }
+            await MainActor.run { weakModel = model }
+            let state = await openAndWait(model, zip)
+            await MainActor.run {
+                weakState = state
+                model.test(state)
+                model.createFolder(named: "New", in: state)
+            }
+            await waitForIdle(model)
+            await MainActor.run {
+                model.beginCompress([source])
+                model.sheet = nil                 // the sheet closes
+                model.closeArchive(zip)
+                model.center.clearFinished()
+            }
+        }
+        // Let pending main-actor work (completion handlers, reloads) drain.
+        for _ in 0..<20 { await MainActor.run {}; try? await Task.sleep(nanoseconds: 50_000_000) }
+        await MainActor.run {
+            XCTAssertNil(weakState, "a closed archive's BrowserState leaked")
+            XCTAssertNil(weakModel, "AppModel leaked")
+        }
+    }
+}

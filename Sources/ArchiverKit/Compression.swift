@@ -152,8 +152,11 @@ extension ArchiveService {
                 progress.setOutput(baseOut + s.outputBytes)
                 progress.setCurrentItem(s.currentItem)
             }
-            progress.onCancel { sub.cancel() }
-            progress.onPauseChange { $0 ? sub.pause() : sub.resume() }
+            // Weak, and removed after this group: `sub` observes `progress`, so strong handlers made a
+            // retain cycle that leaked both progress objects (and their handlers) on every compression.
+            let handlers = [progress.onCancel { [weak sub] in sub?.cancel() },
+                            progress.onPauseChange { [weak sub] paused in paused ? sub?.pause() : sub?.resume() }]
+            defer { progress.removeHandlers(handlers) }
             progress.setPhase("Compressing")
             let result = try engine.create(CreateRequest(output: output, format: settings.format, items: collection.items,
                                                          settings: settings, password: settings.encryption != nil ? request.password : nil),

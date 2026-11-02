@@ -148,6 +148,15 @@ final class LAOutput {
     private(set) var bytes: UInt64 = 0
     var error: ArchiveError?
     let progress: OperationProgress?
+    /// Once set, output is accepted and thrown away (the partial file is discarded anyway).
+    var discarding = false
+    /// How a cancellation reaches libarchive. Failing the write marks the handle fatal, so it stops at
+    /// once, but libarchive then never closes its compression filters, and closing is where its
+    /// bzip2 and zlib encoders release their memory (7.5 MB per cancelled bzip2 compression, never
+    /// freed). With this set, a cancellation switches to `discarding` instead: the writer stops at its
+    /// next cancellation check and the handle is closed normally in the background. Not for zstd or
+    /// filters run as helper programs, which would keep working for seconds before returning.
+    var discardOnCancel = false
     /// Compression applied here rather than by libarchive (whose output is then a plain tar or raw stream).
     enum Encoder {
         case brotli(quality: Int)
@@ -172,6 +181,7 @@ final class LAOutput {
 
     func write(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int {
         guard let ptr, len > 0 else { return 0 }
+        if discarding { return len }
         do {
             try progress?.checkCancelled()
             let buf = UnsafeRawBufferPointer(start: ptr, count: len)
@@ -183,6 +193,11 @@ final class LAOutput {
             return len
         } catch let e as ArchiveError {
             error = e
+            // Cancelled: keep the handle healthy where that frees its encoders (see `discardOnCancel`).
+            if case .cancelled = e, discardOnCancel {
+                discarding = true
+                return len
+            }
             return -1
         } catch {
             return -1

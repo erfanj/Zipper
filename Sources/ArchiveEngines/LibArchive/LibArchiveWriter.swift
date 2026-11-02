@@ -37,11 +37,19 @@ final class LibArchiveWriter {
         defer {
             let context = callbackContext
             if failed {
-                // After archive_write_fail nothing is written any more, but freeing still waits for
-                // in-flight multithreaded encoder jobs (zstd at high levels: seconds). Let the
-                // cancellation or error return now and release the encoder in the background.
+                // The output is discarded (nothing reaches the file any more), but closing still
+                // finishes the encoders' work and waits for in-flight multithreaded jobs (zstd at
+                // high levels: seconds). Let the cancellation or error return now and close and free
+                // in the background. Closing is what releases the encoders' memory; a handle that
+                // libarchive marked fatal (a real write error) skips it, which can't be helped.
+                context?.discarding = true
                 let handle = WriteHandle(a: a, context: context)
-                DispatchQueue.global(qos: .utility).async { withExtendedLifetime(handle.context) { _ = archive_write_free(handle.a) } }
+                DispatchQueue.global(qos: .utility).async {
+                    withExtendedLifetime(handle.context) {
+                        _ = archive_write_close(handle.a)
+                        _ = archive_write_free(handle.a)
+                    }
+                }
             } else {
                 withExtendedLifetime(context) { _ = archive_write_free(a) }
             }
@@ -57,6 +65,9 @@ final class LibArchiveWriter {
         }
         let level = settings.clampedLevel
         var encoder: LAOutput.Encoder?
+        // How a cancellation stops libarchive; see LAOutput.discardOnCancel. Only where it's needed
+        // (libarchive's bzip2 and zlib encoders leak otherwise) and quick (they finish within one block).
+        var discardOnCancel = false
         var isRaw = false
         var isZipFamily = false
 
@@ -71,6 +82,7 @@ final class LibArchiveWriter {
             }
             let name = ["store": "store", "deflate": "deflate", "bzip2": "bzip2", "lzma": "lzma", "xz": "xz", "zstd": "zstd"][method.rawValue] ?? "deflate"
             try option("zip", "compression", name)
+            discardOnCancel = [.store, .deflate, .bzip2].contains(method)
             if method != .store { _ = archive_write_set_option(a, "zip", "compression-level", String(level)) }
             // Always record names as UTF-8 with the language-encoding flag set.
             _ = archive_write_set_option(a, "zip", "hdrcharset", "UTF-8")
@@ -174,6 +186,11 @@ final class LibArchiveWriter {
             }
         }
 
+        if [.tar, .cpio, .ar].contains(container) || isRaw || FormatCatalog.descriptor(for: format)?.kind == .compressedArchive {
+            // No libarchive filter, gzip or bzip2; xz and Brotli are Zipper's own encoders, which stop at once.
+            discardOnCancel = outer == nil || [.gzip, .bzip2, .xz, .brotli].contains(outer!)
+        }
+
         let files = request.items.filter { $0.type == .file }
         if isRaw {
             guard request.items.count == 1, files.count == 1 else {
@@ -190,6 +207,7 @@ final class LibArchiveWriter {
         let out = try AtomicOutputFile(request.output)
         let output: LAOutput
         do { output = try LAOutput(fd: out.fd, encoder: encoder, progress: progress) } catch { out.discard(); throw error }
+        output.discardOnCancel = discardOnCancel
         callbackContext = output
         let ctx = Unmanaged.passUnretained(output).toOpaque()
         // No padding of the final block: tape-style 10 KB blocking only wastes space on disk.
@@ -224,8 +242,8 @@ final class LibArchiveWriter {
             try progress.checkCancelled()
             try out.commit()
         } catch {
-            // Mark the handle failed so archive_write_free doesn't flush into the discarded file.
-            archive_write_fail(a)
+            // Closed and freed in the background with the output discarded (see the defer above).
+            output.discarding = true
             failed = true
             out.discard()
             // A failing write callback (cancellation, disk full) reaches libarchive's caller as a
