@@ -59,9 +59,19 @@ final class ZipperUITests: XCTestCase {
         e.descendants(matching: .any).matching(NSPredicate(format: "value == %@ OR label == %@ OR title == %@", s, s, s)).firstMatch
     }
 
-    /// An Activity row (its texts are combined into one element) mentioning `s`.
-    func activity(_ s: String) -> XCUIElement {
-        mainWindow.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", s, s)).firstMatch
+    /// Waits for an Activity row mentioning `s`. A row's texts are combined into one element, so its
+    /// label holds them all. `value CONTAINS` is asked of static texts only: other elements (rows,
+    /// checkboxes, segmented controls) have numeric values, and CONTAINS on a number makes the whole
+    /// query fail, which XCTest reports as "Timed out while evaluating UI query".
+    func waitForActivity(_ s: String, timeout: TimeInterval = 30) -> Bool {
+        let byLabel = mainWindow.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", s)).firstMatch
+        let byText = mainWindow.staticTexts.matching(NSPredicate(format: "value CONTAINS %@", s)).firstMatch
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if byLabel.exists || byText.exists { return true }
+            Thread.sleep(forTimeInterval: 0.5)
+        } while Date() < deadline
+        return false
     }
 
     func dumpOnFailure(_ ok: Bool, _ what: String, file: StaticString = #filePath, line: UInt = #line) {
@@ -244,8 +254,8 @@ final class ZipperUITests: XCTestCase {
         dumpOnFailure(anything("Sample", in: main).waitForExistence(timeout: 20), "the listing didn't load")
         main.typeKey("e", modifierFlags: .command)
         text("Activity", in: sidebar(main)).click()
-        dumpOnFailure(activity("files extracted").waitForExistence(timeout: 30), "⌘E didn't extract (no finished extraction in Activity)")
-        XCTAssertTrue(activity("Extract Sample.zip").exists)
+        dumpOnFailure(waitForActivity("files extracted"), "⌘E didn't extract (no finished extraction in Activity)")
+        XCTAssertTrue(waitForActivity("Extract Sample.zip", timeout: 5))
     }
 
     // MARK: Sheets
@@ -270,6 +280,6 @@ final class ZipperUITests: XCTestCase {
         compress.click()
         XCTAssertTrue(waitGone(sheet))
         text("Activity", in: sidebar(mainWindow)).click()
-        dumpOnFailure(activity("Sample.zip").waitForExistence(timeout: 30), "Activity doesn't list the new Sample.zip")
+        dumpOnFailure(waitForActivity("Sample.zip"), "Activity doesn't list the new Sample.zip")
     }
 }
