@@ -151,13 +151,20 @@ final class StressTests: XCTestCase {
         let a = try service.compress(CompressRequest(items: [f], destinationDirectory: work, settings: CompressionSettings(format: .tarZstd, level: 1))).archives[0].outputs[0]
         try FileManager.default.removeItem(at: f)
         let before = residentMemory()
-        var peak = before
+        // The sampler owns `peak` until it has stopped (`stopped`), so reading it isn't a data race.
+        final class Peak: @unchecked Sendable { var value: UInt64 = 0 }
+        let peakBox = Peak()
+        peakBox.value = before
         let done = DispatchSemaphore(value: 0)
+        let stopped = DispatchSemaphore(value: 0)
         DispatchQueue.global().async {
-            while done.wait(timeout: .now() + 0.05) == .timedOut { peak = max(peak, residentMemory()) }
+            while done.wait(timeout: .now() + 0.05) == .timedOut { peakBox.value = max(peakBox.value, residentMemory()) }
+            stopped.signal()
         }
         _ = try service.extract(ExtractRequest(archive: a, destination: work.appendingPathComponent("x")))
         done.signal()
+        stopped.wait()
+        let peak = peakBox.value
         let growth = peak > before ? peak - before : 0
         print("streaming extraction of \(size >> 20) MB: resident memory grew by \(growth >> 20) MB")
         XCTAssertLessThan(growth, 150 << 20, "extraction must stream, not buffer the archive")

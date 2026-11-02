@@ -1198,3 +1198,98 @@ final class SettingsFlowTests: AppFlowTestCase {
         }
     }
 }
+
+// MARK: - The browser with hostile and huge archives
+
+final class BrowserRobustnessTests: XCTestCase {
+    static var fixtures: URL {
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Fixtures")
+    }
+
+    func listing(_ paths: [(String, EntryType)]) -> ArchiveListing {
+        ArchiveListing(properties: ArchiveProperties(format: .zip, engine: .libarchive),
+                       entries: paths.enumerated().map { i, e in ArchiveEntry(index: i, path: e.0, type: e.1, uncompressedSize: 1) })
+    }
+
+    /// Walks every folder of the index the way a user clicking through the browser would.
+    @MainActor
+    func walk(_ state: BrowserState, file: StaticString = #filePath, line: UInt = #line) -> Int {
+        var seen = 0
+        var queue = [""]
+        var visited = Set<String>()
+        while let folder = queue.popLast() {
+            guard visited.insert(folder).inserted else { continue }
+            XCTAssertLessThan(visited.count, 100_000, "folder walk doesn't terminate", file: file, line: line)
+            state.open(folder: folder)
+            for r in state.rows {
+                seen += 1
+                XCTAssertFalse(r.name.isEmpty, "a row with no name in “\(folder)”", file: file, line: line)
+                if r.isFolder { queue.append(r.path) }
+            }
+            state.goUp()
+        }
+        return seen
+    }
+
+    func testHostilePathsNeitherCrashNorLoop() async {
+        let index = FolderIndex(listing: listing([
+            ("../../etc/passwd", .file), ("/abs/file.txt", .file), ("a//b.txt", .file), ("./c.txt", .file),
+            ("dup.txt", .file), ("dup.txt", .file), ("dir/", .directory), ("dir", .directory), ("x/./y.txt", .file),
+            ("", .file), (".", .directory), ("..", .directory), ("deep/" + String(repeating: "d/", count: 300) + "f.txt", .file),
+            ("win\\style\\path.txt", .file), ("dir/inner.txt", .file),
+        ]))
+        await MainActor.run {
+            let state = BrowserState(url: URL(fileURLWithPath: "/tmp/hostile.zip"))
+            state.show(nil, index: index)
+            XCTAssertGreaterThan(walk(state), 5)
+            state.searchText = "passwd"
+            _ = state.rows
+            state.searchText = ""
+            for mode in BrowserState.ViewMode.allCases { state.viewMode = mode; _ = state.rows(in: "") }
+        }
+    }
+
+    func testEveryFixtureCanBeBrowsed() async throws {
+        let fm = FileManager.default
+        let service = ArchiveService()
+        var opened = 0
+        let urls = (fm.enumerator(at: Self.fixtures, includingPropertiesForKeys: nil)?.allObjects as? [URL] ?? [])
+            .filter { !$0.hasDirectoryPath && !(try! $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory ?? false) }
+        for url in urls {
+            guard let o = try? service.open(url) else { continue }   // encrypted, unsupported or deliberately broken
+            opened += 1
+            let index = FolderIndex(listing: o.listing)
+            await MainActor.run {
+                let state = BrowserState(url: url)
+                state.show(o, index: index)
+                _ = walk(state)
+            }
+        }
+        XCTAssertGreaterThan(opened, 30, "expected to browse most fixtures")
+    }
+
+    func testHugeArchiveIndexesAndBrowsesQuickly() async {
+        var paths: [(String, EntryType)] = []
+        for d in 0..<2_000 {
+            for f in 0..<100 { paths.append(("folder\(d)/file\(f).txt", .file)) }
+            paths.append(("folder\(d)/", .directory))   // directory entries after their files (as some tools write them)
+        }
+        let big = listing(paths)
+        let start = Date()
+        let index = FolderIndex(listing: big)
+        let built = Date().timeIntervalSince(start)
+        XCTAssertLessThan(built, 10, "indexing 202,000 entries took \(built) s")
+        await MainActor.run {
+            let state = BrowserState(url: URL(fileURLWithPath: "/tmp/huge.zip"))
+            state.show(nil, index: index)
+            let t = Date()
+            XCTAssertEqual(state.rows.count, 2_000)
+            state.open(folder: "folder1999")
+            XCTAssertEqual(state.rows.count, 100)
+            state.searchText = "file99.txt"
+            XCTAssertEqual(state.rows.count, 2_000)
+            XCTAssertLessThan(Date().timeIntervalSince(t), 10, "browsing the huge archive is too slow")
+        }
+    }
+}
