@@ -1,0 +1,532 @@
+{
+ "machine": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+ "cpus": 4,
+ "system": "Linux-6.18.44-fc-v80-x86_64-with-glibc2.39",
+ "results": [
+  {
+   "dataset": "Large text",
+   "input_bytes": 60000000,
+   "format": "ZIP \u00b7 Deflate 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 3.877345482000237,
+    "bytes": 14049233,
+    "peak_rss": 30638080,
+    "extract_seconds": 0.36507828399953723,
+    "extract_peak_rss": 30330880
+   },
+   "ref": {
+    "name": "Info-ZIP zip -6",
+    "seconds": 4.206833354999617,
+    "bytes": 14039722,
+    "peak_rss": 2383872,
+    "extract_seconds": 0.3658203039994987,
+    "extract_peak_rss": 30568448
+   }
+  },
+  {
+   "dataset": "Large text",
+   "input_bytes": 60000000,
+   "format": "TAR.GZ \u00b7 level 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 3.7228201699999772,
+    "bytes": 14049085,
+    "peak_rss": 30789632,
+    "extract_seconds": 0.36922016500011523,
+    "extract_peak_rss": 30646272
+   },
+   "ref": {
+    "name": "GNU tar + gzip -6",
+    "seconds": 3.9310509239994644,
+    "bytes": 14039651,
+    "peak_rss": 2838528,
+    "extract_seconds": 0.3649936860001617,
+    "extract_peak_rss": 30625792
+   }
+  },
+  {
+   "dataset": "Large text",
+   "input_bytes": 60000000,
+   "format": "TAR.XZ \u00b7 level 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 25.842250216999673,
+    "bytes": 11108608,
+    "peak_rss": 356495360,
+    "extract_seconds": 0.7978125470008308,
+    "extract_peak_rss": 38178816
+   },
+   "ref": {
+    "name": "GNU tar + xz -6 -T0",
+    "seconds": 25.745188227000654,
+    "bytes": 11107932,
+    "peak_rss": 328929280,
+    "extract_seconds": 0.8640425110006618,
+    "extract_peak_rss": 38014976
+   }
+  },
+  {
+   "dataset": "Large text",
+   "input_bytes": 60000000,
+   "format": "TAR.ZST \u00b7 level 3",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 0.36056531999929575,
+    "bytes": 15042826,
+    "peak_rss": 92135424,
+    "extract_seconds": 0.2479402349999873,
+    "extract_peak_rss": 32468992
+   },
+   "ref": {
+    "name": "GNU tar + zstd -3 -T0",
+    "seconds": 0.15856740299932426,
+    "bytes": 15042818,
+    "peak_rss": 80031744,
+    "extract_seconds": 0.3160549340000216,
+    "extract_peak_rss": 32362496
+   }
+  },
+  {
+   "dataset": "Large text",
+   "input_bytes": 60000000,
+   "format": "7z \u00b7 LZMA2 level 5",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 54.67947616499987,
+    "bytes": 10993648,
+    "peak_rss": 207458304,
+    "extract_seconds": 0.7599492480003391,
+    "extract_peak_rss": 46682112
+   },
+   "ref": {
+    "name": "7-Zip 7z -mx5",
+    "seconds": 56.33370258699961,
+    "bytes": 10993688,
+    "peak_rss": 207384576,
+    "extract_seconds": 0.7227601060003508,
+    "extract_peak_rss": 46600192
+   }
+  },
+  {
+   "dataset": "Source code",
+   "input_bytes": 34433048,
+   "format": "ZIP \u00b7 Deflate 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 0.9046937709999838,
+    "bytes": 8810900,
+    "peak_rss": 32067584,
+    "extract_seconds": 0.5517595700002857,
+    "extract_peak_rss": 32612352
+   },
+   "ref": {
+    "name": "Info-ZIP zip -6",
+    "seconds": 0.7498670220002168,
+    "bytes": 8778295,
+    "peak_rss": 3694592,
+    "extract_seconds": 0.6566282969997701,
+    "extract_peak_rss": 32706560
+   }
+  },
+  {
+   "dataset": "Source code",
+   "input_bytes": 34433048,
+   "format": "TAR.GZ \u00b7 level 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 1.1390846160002184,
+    "bytes": 7750540,
+    "peak_rss": 31678464,
+    "extract_seconds": 1.000137936000101,
+    "extract_peak_rss": 31875072
+   },
+   "ref": {
+    "name": "GNU tar + gzip -6",
+    "seconds": 0.7732344659998489,
+    "bytes": 7875695,
+    "peak_rss": 2969600,
+    "extract_seconds": 1.0461704170002122,
+    "extract_peak_rss": 31977472
+   }
+  },
+  {
+   "dataset": "Source code",
+   "input_bytes": 34433048,
+   "format": "TAR.XZ \u00b7 level 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 10.315633659000014,
+    "bytes": 5474140,
+    "peak_rss": 264302592,
+    "extract_seconds": 1.4376037550000547,
+    "extract_peak_rss": 39399424
+   },
+   "ref": {
+    "name": "GNU tar + xz -6 -T0",
+    "seconds": 11.763564236000093,
+    "bytes": 5394080,
+    "peak_rss": 236130304,
+    "extract_seconds": 1.41935268799989,
+    "extract_peak_rss": 39432192
+   }
+  },
+  {
+   "dataset": "Source code",
+   "input_bytes": 34433048,
+   "format": "TAR.ZST \u00b7 level 3",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 0.3173950460004562,
+    "bytes": 6547282,
+    "peak_rss": 73977856,
+    "extract_seconds": 0.8848874140003318,
+    "extract_peak_rss": 33742848
+   },
+   "ref": {
+    "name": "GNU tar + zstd -3 -T0",
+    "seconds": 0.1078138630000467,
+    "bytes": 6818592,
+    "peak_rss": 51228672,
+    "extract_seconds": 1.0203205449997768,
+    "extract_peak_rss": 33628160
+   }
+  },
+  {
+   "dataset": "Source code",
+   "input_bytes": 34433048,
+   "format": "7z \u00b7 LZMA2 level 5",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 7.911757695000233,
+    "bytes": 5445131,
+    "peak_rss": 209195008,
+    "extract_seconds": 1.446454339000411,
+    "extract_peak_rss": 48762880
+   },
+   "ref": {
+    "name": "7-Zip 7z -mx5",
+    "seconds": 7.931742308000139,
+    "bytes": 5446653,
+    "peak_rss": 209346560,
+    "extract_seconds": 1.1784199730000182,
+    "extract_peak_rss": 48717824
+   }
+  },
+  {
+   "dataset": "20k small files",
+   "input_bytes": 1838280,
+   "format": "ZIP \u00b7 Deflate 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 0.5445760839993454,
+    "bytes": 3038793,
+    "peak_rss": 36818944,
+    "extract_seconds": 2.331247613999949,
+    "extract_peak_rss": 39784448
+   },
+   "ref": {
+    "name": "Info-ZIP zip -6",
+    "seconds": 0.22812546000022849,
+    "bytes": 2757880,
+    "peak_rss": 6516736,
+    "extract_seconds": 3.390036976999909,
+    "extract_peak_rss": 39755776
+   }
+  },
+  {
+   "dataset": "20k small files",
+   "input_bytes": 1838280,
+   "format": "TAR.GZ \u00b7 level 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 0.5605593359996419,
+    "bytes": 704461,
+    "peak_rss": 36904960,
+    "extract_seconds": 4.614356315000805,
+    "extract_peak_rss": 33456128
+   },
+   "ref": {
+    "name": "GNU tar + gzip -6",
+    "seconds": 0.12048629699984303,
+    "bytes": 712055,
+    "peak_rss": 2838528,
+    "extract_seconds": 4.385856464999961,
+    "extract_peak_rss": 33554432
+   }
+  },
+  {
+   "dataset": "20k small files",
+   "input_bytes": 1838280,
+   "format": "TAR.XZ \u00b7 level 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 2.972833329000423,
+    "bytes": 514860,
+    "peak_rss": 130215936,
+    "extract_seconds": 5.460404190999725,
+    "extract_peak_rss": 41533440
+   },
+   "ref": {
+    "name": "GNU tar + xz -6 -T0",
+    "seconds": 2.8326916630003325,
+    "bytes": 518660,
+    "peak_rss": 96919552,
+    "extract_seconds": 5.133610561999376,
+    "extract_peak_rss": 41484288
+   }
+  },
+  {
+   "dataset": "20k small files",
+   "input_bytes": 1838280,
+   "format": "TAR.ZST \u00b7 level 3",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 0.45934407000004285,
+    "bytes": 676875,
+    "peak_rss": 47697920,
+    "extract_seconds": 5.402403681000578,
+    "extract_peak_rss": 35483648
+   },
+   "ref": {
+    "name": "GNU tar + zstd -3 -T0",
+    "seconds": 0.06633433300066827,
+    "bytes": 694512,
+    "peak_rss": 16224256,
+    "extract_seconds": 5.012240492000274,
+    "extract_peak_rss": 35471360
+   }
+  },
+  {
+   "dataset": "20k small files",
+   "input_bytes": 1838280,
+   "format": "7z \u00b7 LZMA2 level 5",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 1.4267635859996517,
+    "bytes": 423526,
+    "peak_rss": 41033728,
+    "extract_seconds": 5.133098427999357,
+    "extract_peak_rss": 39964672
+   },
+   "ref": {
+    "name": "7-Zip 7z -mx5",
+    "seconds": 0.883205375000216,
+    "bytes": 423721,
+    "peak_rss": 39354368,
+    "extract_seconds": 2.3196552210001755,
+    "extract_peak_rss": 39956480
+   }
+  },
+  {
+   "dataset": "Already-compressed (JPEG-like)",
+   "input_bytes": 60000000,
+   "format": "ZIP \u00b7 Deflate 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 1.6245742499995686,
+    "bytes": 60019288,
+    "peak_rss": 30756864,
+    "extract_seconds": 0.23080460599976504,
+    "extract_peak_rss": 30806016
+   },
+   "ref": {
+    "name": "Info-ZIP zip -6",
+    "seconds": 1.5167385720005768,
+    "bytes": 60010004,
+    "peak_rss": 2322432,
+    "extract_seconds": 0.23031102900040423,
+    "extract_peak_rss": 30724096
+   }
+  },
+  {
+   "dataset": "Already-compressed (JPEG-like)",
+   "input_bytes": 60000000,
+   "format": "TAR.GZ \u00b7 level 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 1.6596807690002606,
+    "bytes": 60018988,
+    "peak_rss": 30773248,
+    "extract_seconds": 0.21963931899972522,
+    "extract_peak_rss": 30564352
+   },
+   "ref": {
+    "name": "GNU tar + gzip -6",
+    "seconds": 1.7127621609997732,
+    "bytes": 60009864,
+    "peak_rss": 2904064,
+    "extract_seconds": 0.2139960410004278,
+    "extract_peak_rss": 30486528
+   }
+  },
+  {
+   "dataset": "Already-compressed (JPEG-like)",
+   "input_bytes": 60000000,
+   "format": "TAR.XZ \u00b7 level 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 14.735000583000328,
+    "bytes": 60006192,
+    "peak_rss": 438341632,
+    "extract_seconds": 0.25242367800001375,
+    "extract_peak_rss": 38830080
+   },
+   "ref": {
+    "name": "GNU tar + xz -6 -T0",
+    "seconds": 15.190634968999802,
+    "bytes": 60006204,
+    "peak_rss": 410968064,
+    "extract_seconds": 0.24853386500035413,
+    "extract_peak_rss": 39108608
+   }
+  },
+  {
+   "dataset": "Already-compressed (JPEG-like)",
+   "input_bytes": 60000000,
+   "format": "TAR.ZST \u00b7 level 3",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 0.35309301699999196,
+    "bytes": 60005220,
+    "peak_rss": 142995456,
+    "extract_seconds": 0.22587881900017237,
+    "extract_peak_rss": 32071680
+   },
+   "ref": {
+    "name": "GNU tar + zstd -3 -T0",
+    "seconds": 0.08257358499940892,
+    "bytes": 60004524,
+    "peak_rss": 83308544,
+    "extract_seconds": 0.2258671849995153,
+    "extract_peak_rss": 32292864
+   }
+  },
+  {
+   "dataset": "Already-compressed (JPEG-like)",
+   "input_bytes": 60000000,
+   "format": "7z \u00b7 LZMA2 level 5",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 7.076571069000238,
+    "bytes": 60003943,
+    "peak_rss": 207327232,
+    "extract_seconds": 0.24722094499975356,
+    "extract_peak_rss": 46870528
+   },
+   "ref": {
+    "name": "7-Zip 7z -mx5",
+    "seconds": 7.188553498000147,
+    "bytes": 60003955,
+    "peak_rss": 207282176,
+    "extract_seconds": 0.24596330300028058,
+    "extract_peak_rss": 46874624
+   }
+  },
+  {
+   "dataset": "Mixed folder",
+   "input_bytes": 40769301,
+   "format": "ZIP \u00b7 Deflate 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 1.7868829090002691,
+    "bytes": 24935276,
+    "peak_rss": 30736384,
+    "extract_seconds": 0.3434011199997258,
+    "extract_peak_rss": 30556160
+   },
+   "ref": {
+    "name": "Info-ZIP zip -6",
+    "seconds": 1.955503248000241,
+    "bytes": 24926749,
+    "peak_rss": 2453504,
+    "extract_seconds": 0.32631867899999634,
+    "extract_peak_rss": 30769152
+   }
+  },
+  {
+   "dataset": "Mixed folder",
+   "input_bytes": 40769301,
+   "format": "TAR.GZ \u00b7 level 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 1.8623304209995695,
+    "bytes": 24885242,
+    "peak_rss": 30851072,
+    "extract_seconds": 0.2569931079997332,
+    "extract_peak_rss": 30445568
+   },
+   "ref": {
+    "name": "GNU tar + gzip -6",
+    "seconds": 2.0149450050002997,
+    "bytes": 24877556,
+    "peak_rss": 2834432,
+    "extract_seconds": 0.2646947889998046,
+    "extract_peak_rss": 30691328
+   }
+  },
+  {
+   "dataset": "Mixed folder",
+   "input_bytes": 40769301,
+   "format": "TAR.XZ \u00b7 level 6",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 15.713070183000127,
+    "bytes": 23885736,
+    "peak_rss": 278077440,
+    "extract_seconds": 0.41780522399949405,
+    "extract_peak_rss": 38252544
+   },
+   "ref": {
+    "name": "GNU tar + xz -6 -T0",
+    "seconds": 16.213032337000186,
+    "bytes": 23886820,
+    "peak_rss": 250806272,
+    "extract_seconds": 0.39184726100029366,
+    "extract_peak_rss": 38277120
+   }
+  },
+  {
+   "dataset": "Mixed folder",
+   "input_bytes": 40769301,
+   "format": "TAR.ZST \u00b7 level 3",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 0.31043086299996503,
+    "bytes": 25208598,
+    "peak_rss": 99205120,
+    "extract_seconds": 0.24287102400012373,
+    "extract_peak_rss": 32342016
+   },
+   "ref": {
+    "name": "GNU tar + zstd -3 -T0",
+    "seconds": 0.10430964999977732,
+    "bytes": 25208494,
+    "peak_rss": 70234112,
+    "extract_seconds": 0.2509684560000096,
+    "extract_peak_rss": 32501760
+   }
+  },
+  {
+   "dataset": "Mixed folder",
+   "input_bytes": 40769301,
+   "format": "7z \u00b7 LZMA2 level 5",
+   "ours": {
+    "name": "Zipper",
+    "seconds": 19.128445471000305,
+    "bytes": 23850459,
+    "peak_rss": 207200256,
+    "extract_seconds": 0.46604493700033345,
+    "extract_peak_rss": 46678016
+   },
+   "ref": {
+    "name": "7-Zip 7z -mx5",
+    "seconds": 18.627412193000055,
+    "bytes": 23850678,
+    "peak_rss": 207249408,
+    "extract_seconds": 0.3794669700000668,
+    "extract_peak_rss": 46710784
+   }
+  }
+ ]
+}

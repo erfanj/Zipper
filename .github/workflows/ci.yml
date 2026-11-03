@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The fuzz test spawns helper tools for each mutated archive; 20 iterations (220 archives) keep CI
+  # under a few minutes. Run locally with UA_FUZZ_ITERATIONS=150 for the full sweep.
+  UA_FUZZ_ITERATIONS: "20"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Core, engines, CLI and tests (Linux)
+    runs-on: ubuntu-24.04
+    container: swift:6.1-noble
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install libraries and reference tools
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libarchive-dev libbrotli-dev liblzma-dev zlib1g-dev \
+            7zip 7zip-rar unar zip unzip lzip lzop zstd lz4 brotli xz-utils bzip2 cpio \
+            lrzip zpaq nomarch jlha-utils python3
+      - name: Build
+        run: swift build --build-tests
+      - name: Test
+        timeout-minutes: 20   # the suite takes ~3 minutes; fail fast (with a readable log) if anything hangs
+        run: swift test --skip-build
+
+  macos:
+    name: macOS app (Xcode) and tests
+    # macOS minutes cost 10× on private repositories: run on pull requests, on demand, or when a
+    # pushed commit message contains [macos].
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[macos]')
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: xcodebuild -version && swift --version
+      # Caches are restored and saved as separate steps so they're kept even when a later step
+      # fails (actions/cache only saves after a successful job).
+      - name: Restore vendored libraries
+        id: vendor
+        uses: actions/cache/restore@v4
+        with:
+          path: Vendor/macos
+          key: vendor-${{ runner.os }}-${{ hashFiles('Scripts/build-deps-macos.sh') }}
+      - name: Build pinned dependencies
+        if: steps.vendor.outputs.cache-hit != 'true'
+        run: Scripts/build-deps-macos.sh
+      - name: Save vendored libraries
+        if: steps.vendor.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: Vendor/macos
+          key: ${{ steps.vendor.outputs.cache-primary-key }}
+      - name: Restore build products (incremental rebuilds)
+        id: products
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            build/DerivedData
+            .build
+          key: build-${{ runner.os }}-${{ hashFiles('Package.swift', 'Package.resolved', 'project.yml') }}-${{ github.sha }}
+          restore-keys: |
+            build-${{ runner.os }}-${{ hashFiles('Package.swift', 'Package.resolved', 'project.yml') }}-
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Build the app (Debug, signed to run locally)
+        run: |
+          mkdir -p build
+          if ! xcodebuild -project Zipper.xcodeproj -scheme Zipper -configuration Debug \
+               -destination 'platform=macOS' -derivedDataPath build/DerivedData build > build/xcodebuild.log 2>&1; then
+            echo "::group::Errors"; grep -E "error:" build/xcodebuild.log | sort -u | head -150; echo "::endgroup::"
+            tail -60 build/xcodebuild.log
+            exit 1
+          fi
+          echo "Warnings:"; grep -E "warning:" build/xcodebuild.log | grep -v "/Vendor/" | sort -u | head -80 || true
+      - name: Check the bundle
+        run: |
+          APP=build/DerivedData/Build/Products/Debug/Zipper.app
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          ls -la "$APP/Contents/Helpers" "$APP/Contents/PlugIns"
+          "$APP/Contents/Helpers/zipper" --version
+          plutil -lint "$APP/Contents/Info.plist"
+      - name: Package the app for download
+        run: ditto -c -k --keepParent build/DerivedData/Build/Products/Debug/Zipper.app Zipper-debug.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Zipper-debug-app
+          path: Zipper-debug.zip
+          retention-days: 7
+      - name: Build and test the package on macOS (bundled libarchive and 7-Zip)
+        timeout-minutes: 25
+        # The bundled 7-Zip (Vendor/macos/helpers/7zz) is the engine and the reference tool; the
+        # runner's own 7z is p7zip 17.05, older than the 21.00 Zipper requires.
+        env:
+          UA_HELPERS_DIR: ${{ github.workspace }}/Vendor/macos/helpers
+        run: |
+          swift build --build-tests
+          swift test --skip-build
+      - name: UI tests (XCUITest drives the app's windows, menus and sheets)
+        timeout-minutes: 20
+        if: success()
+        run: |
+          if ! xcodebuild test -project Zipper.xcodeproj -scheme Zipper -destination 'platform=macOS' \
+               -derivedDataPath build/DerivedData -resultBundlePath build/UITests.xcresult > build/uitests.log 2>&1; then
+            grep -E "error:|failed|Test Case .*(passed|failed)|Executed" build/uitests.log | tail -120
+            echo "::group::Accessibility trees at the failures"; grep -A120 "UI-DUMP" build/uitests.log | head -600; echo "::endgroup::"
+            exit 1
+          fi
+          grep -E "Test Case .*(passed|failed)|Executed" build/uitests.log | tail -40
+      - name: Save build products
+        if: always() && steps.products.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            build/DerivedData
+            .build
+          key: ${{ steps.products.outputs.cache-primary-key }}

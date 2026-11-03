@@ -1,0 +1,627 @@
+{
+ "generated": "2026-10-09",
+ "tools": {
+  "7z": "7-Zip 23.01 (x64) : Copyright (c) 1999-2023 Igor Pavlov : 2023-06-20",
+  "rar": "7.00",
+  "zip": "Copyright (c) 1990-2008 Info-ZIP - Type 'zip \"-L\"' for software license.",
+  "tar": "tar (GNU tar) 1.35"
+ },
+ "fixtures": [
+  {
+   "file": "zip/infozip-utf8.zip",
+   "format": "zip",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "zip/infozip-zipcrypto.zip",
+   "format": "zip",
+   "payload": "unicode",
+   "password": "zipcrypto-pw",
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "zip/infozip-store.zip",
+   "format": "zip",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "zip/infozip-split.zip",
+   "format": "zip",
+   "payload": "single:big.bin",
+   "password": null,
+   "encoding": null,
+   "note": "spanned .z01 set"
+  },
+  {
+   "file": "zip/legacy-shiftjis.zip",
+   "format": "zip",
+   "payload": "raw:日本語.txt=sjis payload\\n",
+   "password": null,
+   "encoding": "CP932",
+   "note": "Shift-JIS names, no UTF-8 flag"
+  },
+  {
+   "file": "zip/legacy-cp437.zip",
+   "format": "zip",
+   "payload": "raw:Café.txt=cp437 payload\\n",
+   "password": null,
+   "encoding": null,
+   "note": "CP437 names, no UTF-8 flag"
+  },
+  {
+   "file": "7z/lzma2.7z",
+   "format": "7z",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "7z/ppmd.7z",
+   "format": "7z",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "7z/bzip2.7z",
+   "format": "7z",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "7z/nonsolid.7z",
+   "format": "7z",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "7z/aes.7z",
+   "format": "7z",
+   "payload": "unicode",
+   "password": "seven-pw",
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "7z/aes-headers.7z",
+   "format": "7z",
+   "payload": "unicode",
+   "password": "seven-pw",
+   "encoding": null,
+   "note": "encrypted file names"
+  },
+  {
+   "file": "7z/split.7z.001",
+   "format": "7z",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": "volumes .001…"
+  },
+  {
+   "file": "zip/7z-aes256.zip",
+   "format": "zip",
+   "payload": "unicode",
+   "password": "zip-aes-pw",
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "zip/7z-aes128.zip",
+   "format": "zip",
+   "payload": "unicode",
+   "password": "zip-aes-pw",
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "zip/7z-deflate64.zip",
+   "format": "zip",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": "Deflate64"
+  },
+  {
+   "file": "zip/7z-bzip2.zip",
+   "format": "zip",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "zip/7z-lzma.zip",
+   "format": "zip",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "zip/7z-ppmd.zip",
+   "format": "zip",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": "PPMd in ZIP"
+  },
+  {
+   "file": "misc/7z.wim",
+   "format": "wim",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "rar/rar5.rar",
+   "format": "rar",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "rar/rar5-solid.rar",
+   "format": "rar",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "rar/rar5-enc.rar",
+   "format": "rar",
+   "payload": "unicode",
+   "password": "rar-pw",
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "rar/rar5-hdrenc.rar",
+   "format": "rar",
+   "payload": "unicode",
+   "password": "rar-pw",
+   "encoding": null,
+   "note": "encrypted headers"
+  },
+  {
+   "file": "rar/multi.part1.rar",
+   "format": "rar",
+   "payload": "single:big.bin",
+   "password": null,
+   "encoding": null,
+   "note": ".partN.rar volumes"
+  },
+  {
+   "file": "rar4/rar3-subdirs.rar",
+   "format": "rar",
+   "payload": "verify-only",
+   "password": null,
+   "encoding": null,
+   "note": "WinRAR-made RAR 2/3 (rarfile test corpus)"
+  },
+  {
+   "file": "rar4/rar3-solid.rar",
+   "format": "rar",
+   "payload": "verify-only",
+   "password": null,
+   "encoding": null,
+   "note": "WinRAR-made RAR 2/3 (rarfile test corpus)"
+  },
+  {
+   "file": "rar4/rar3-symlink-unix.rar",
+   "format": "rar",
+   "payload": "verify-only",
+   "password": null,
+   "encoding": null,
+   "note": "WinRAR-made RAR 2/3 (rarfile test corpus)"
+  },
+  {
+   "file": "rar4/rar202-comment-nopsw.rar",
+   "format": "rar",
+   "payload": "verify-only",
+   "password": null,
+   "encoding": null,
+   "note": "WinRAR-made RAR 2/3 (rarfile test corpus)"
+  },
+  {
+   "file": "rar4/rar3-old.rar",
+   "format": "rar",
+   "payload": "verify-only",
+   "password": null,
+   "encoding": null,
+   "note": "old-style .rar/.r00/.r01 volumes"
+  },
+  {
+   "file": "rar4/rar3-vols.part1.rar",
+   "format": "rar",
+   "payload": "verify-only",
+   "password": null,
+   "encoding": null,
+   "note": "RAR3 .partN volumes"
+  },
+  {
+   "file": "rar4/rar3-comment-psw.rar",
+   "format": "rar",
+   "payload": "verify-only",
+   "password": "password",
+   "encoding": null,
+   "note": "RAR3 AES-128 encrypted files"
+  },
+  {
+   "file": "rar4/rar3-comment-hpsw.rar",
+   "format": "rar",
+   "payload": "verify-only",
+   "password": "password",
+   "encoding": null,
+   "note": "RAR3 encrypted headers"
+  },
+  {
+   "file": "tar/gnu.tar",
+   "format": "tar",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "tar/pax.tar",
+   "format": "tar",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "tar/gnu.tar.gz",
+   "format": "tar.gz",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "tar/gnu.tgz",
+   "format": "tar.gz",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "tar/gnu.tar.bz2",
+   "format": "tar.bz2",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "tar/gnu.tar.xz",
+   "format": "tar.xz",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "tar/gnu.tar.zst",
+   "format": "tar.zst",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "tar/gnu.tar.lz4",
+   "format": "tar.lz4",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "tar/gnu.tar.lz",
+   "format": "tar.lz",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "tar/gnu.tar.lzma",
+   "format": "tar.lzma",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "tar/gnu.tar.Z",
+   "format": "tar.Z",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "tar/gnu.tar.br",
+   "format": "tar.br",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "streams/notes.txt.gz",
+   "format": "gz",
+   "payload": "single:notes.txt",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "streams/notes.txt.bz2",
+   "format": "bz2",
+   "payload": "single:notes.txt",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "streams/notes.txt.xz",
+   "format": "xz",
+   "payload": "single:notes.txt",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "streams/notes.txt.zst",
+   "format": "zst",
+   "payload": "single:notes.txt",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "streams/notes.txt.lz4",
+   "format": "lz4",
+   "payload": "single:notes.txt",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "streams/notes.txt.lz",
+   "format": "lz",
+   "payload": "single:notes.txt",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "streams/notes.txt.lzma",
+   "format": "lzma",
+   "payload": "single:notes.txt",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "streams/notes.txt.Z",
+   "format": "Z",
+   "payload": "single:notes.txt",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "streams/notes.txt.br",
+   "format": "br",
+   "payload": "single:notes.txt",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "streams/notes.txt.lzo",
+   "format": "lzo",
+   "payload": "single:notes.txt",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "streams/notes.txt.lrz",
+   "format": "lrz",
+   "payload": "single:notes.txt",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "misc/newc.cpio",
+   "format": "cpio",
+   "payload": "unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "misc/simple.a",
+   "format": "ar",
+   "payload": "flat-simple",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "packages/uatest.deb",
+   "format": "deb",
+   "payload": "deb",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "misc/simple.cab",
+   "format": "cab",
+   "payload": "flat-simple",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "misc/simple.lzh",
+   "format": "lha",
+   "payload": "simple",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "misc/simple.arj",
+   "format": "arj",
+   "payload": "flat-simple",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "misc/simple.arc",
+   "format": "arc",
+   "payload": "flat-simple",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "misc/simple.zpaq",
+   "format": "zpaq",
+   "payload": "simple",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "misc/notes.uue",
+   "format": "uue",
+   "payload": "single:notes.txt",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "packages/book.epub",
+   "format": "epub",
+   "payload": "epub",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "packages/comic.cbz",
+   "format": "cbz",
+   "payload": "flat-simple",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "images/unicode.iso",
+   "format": "iso",
+   "payload": "image-unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "images/unicode.squashfs",
+   "format": "squashfs",
+   "payload": "image-unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "images/unicode.ext4",
+   "format": "ext",
+   "payload": "image-unicode",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "images/simple.fat",
+   "format": "fat",
+   "payload": "flat-simple",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "images/simple.vhd",
+   "format": "vhd",
+   "payload": "disk-of:images/simple.fat",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "images/simple.qcow2",
+   "format": "qcow2",
+   "payload": "disk-of:images/simple.fat",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "images/simple.vmdk",
+   "format": "vmdk",
+   "payload": "disk-of:images/simple.fat",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "images/simple.vdi",
+   "format": "vdi",
+   "payload": "disk-of:images/simple.fat",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "images/simple.vhdx",
+   "format": "vhdx",
+   "payload": "disk-of:images/simple.fat",
+   "password": null,
+   "encoding": null,
+   "note": null
+  },
+  {
+   "file": "images/simple.ntfs",
+   "format": "ntfs",
+   "payload": "flat-simple",
+   "password": null,
+   "encoding": null,
+   "note": null
+  }
+ ]
+}

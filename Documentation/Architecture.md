@@ -1,0 +1,165 @@
+# Architecture
+
+Zipper is a Swift package with a strict layering: a platform-neutral core, a set of
+interchangeable engines, a service layer, and two front ends (the macOS app and the `zipper`
+CLI). Everything below the app builds and is tested on macOS and Linux.
+
+```
+                           ZIPPER
+                            │
+          ┌─────────────────┴──────────────────┐
+     macOS app (SwiftUI + AppKit)        zipper CLI / Shortcuts / Finder Services
+          └─────────────────┬──────────────────┘
+                            │
+                  ArchiverKit (service façade)
+   extract · compress · convert · modify · test · repair · split/join · compare
+   duplicates · checksums · batch · history · operation queue · passwords · performance
+                            │
+                  ArchiveCore (no engine code)
+   format catalogue & detection · multipart · engine protocol & registry · SafeExtractionSink
+   safety limits · filters · source collection · hashing · presets · advisor · errors
+                            │
+                       Engine registry
+     ┌──────────┬───────────┼────────────┬───────────┬──────────────┬─────────────┐
+ libarchive   7-Zip      unar/lsar     RAR (user-    Apple Archive  hdiutil      zpaq/lrzip/
+ (in-process) (helper)   (helper)      installed)    (framework)    (system)     lzop/nomarch
+ + Brotli                                                                         (helpers)
+                            │
+                  File system (POSIX *at() calls)
+```
+
+## Modules
+
+| Target | Responsibility |
+|---|---|
+| `CArchive`, `CLzma`, `CBrotli`, `CZlib` | The C libraries. On macOS, `Scripts/build-deps-macos.sh` packages pinned static builds as XCFrameworks that `Package.swift` uses as binary targets; elsewhere they are pkg-config system libraries. zlib always comes from the system. |
+| `ArchiveCore` | The engine-agnostic model: `FormatID`/`FormatDescriptor`/`FormatCatalog` (97 formats), `FormatDetector`, `MultipartDetector`, the `ArchiveEngine` protocol and `EngineRegistry`, `SafeExtractionSink`, `SafetyLimits`, `SafePath`, `FileFilter`/`Glob`, `SourceCollector`, `StreamingHasher`, presets, the compression advisor, `ArchiveError`, `OperationProgress`, `Secret`, `ProductInfo`. |
+| `ArchiveEngines` | Concrete engines: `LibArchiveEngine`, `SevenZipEngine`, `UnarEngine`, `RarEngine`, `ExternalToolsEngine`, and on macOS `AppleArchiveEngine` and `DiskImageEngine`. Also helper-process plumbing (`HelperProcess`, `HelperLocator`, `StagingDirectory`, `StagingImporter`). |
+| `ArchiverKit` | High-level operations with engine fallback, smart extraction, conversion, transactional editing, repair, tools, history, operation queue, password storage (Keychain), performance profile. |
+| `ZipperCLI` | The `zipper` command-line tool. |
+| `ZipperMac` | The macOS SwiftUI app. `Model/` is platform-neutral and also compiles (and is unit-tested) on Linux; `Views/`, `App/` and `Platform/` are macOS-only. Release builds come from `project.yml`. |
+| `Integrations/QuickLook` | The Quick Look preview extension (built through the Xcode project). |
+
+## Key design decisions
+
+### One write path: `SafeExtractionSink`
+
+Engines never write extracted files themselves. In-process engines stream entry data into an
+`ExtractionSink`; helper-process engines extract into a private staging folder on the destination
+volume and `StagingImporter` feeds the result through the same sink. The sink is therefore the only
+code that creates files during extraction, and it enforces every rule in one place: path
+validation, `O_NOFOLLOW` component-by-component directory traversal, conflict policy, temporary
+names with atomic placement, permission sanitising, quarantine propagation, and all resource
+limits. See [Security.md](Security.md).
+
+### Staging, then placement
+
+`ArchiveService.extract` always extracts into `.ua-extract-<uuid>` inside the destination folder.
+Only after the engine finishes successfully is the result moved into place (Smart Extract / New
+Folder) or merged (Extract Here, through a second sink that applies the user's conflict policy).
+A failed attempt, a cancellation, or a fallback to another engine therefore never leaves partial
+output in the user's folder.
+
+### Engine selection and fallback
+
+Each engine declares an `EngineFormatSupport` per format: operations (inspect, extract, create,
+modify, test, repair, createSplit, readSplit, encrypt, decrypt, encryptFilenames,
+preserveMetadata, streaming, multithreaded, selectiveExtract), methods, encryption methods,
+memory/threading notes and limitations. Support is discovered at run time where it depends on the
+build (libarchive's writers are probed; 7-Zip's format list is parsed from `7z i`).
+
+`EngineRegistry.candidates(for:requirements:)` returns capable engines in priority order
+(libarchive first — in-process, streaming, no process start-up — then 7-Zip, unar, external tools).
+`ArchiveService.withEngines` runs an operation with the first candidate and retries with the next
+one only for capability errors (unsupported method/encryption, not recognised) and for "damaged"
+verdicts that may be engine-specific. Wrong passwords, checksum mismatches, safety-limit stops and
+cancellations are never retried. Every fallback is recorded in `engineNotes` and shown to the user;
+the policy can be set to ask first or never fall back.
+
+Real cases this resolves (all covered by interop tests): encrypted RAR 5 and RAR3 solid archives
+(libarchive → 7-Zip/unar), encrypted 7z (libarchive → 7-Zip), Deflate64 ZIP (libarchive → 7-Zip),
+ARC variants unar cannot decode (unar → nomarch).
+
+### Format detection
+
+Content signatures first, extension second (`FormatDetector`). Strong signatures override a
+misleading extension; packages that share a container's signature (JAR/EPUB/APK → ZIP, CBR → RAR,
+PKG → XAR) are identified by extension; compression streams are probed for an inner tarball so
+`data.gz` containing a tar is extracted in one step. Multipart sets are recognised from names alone
+(`.partN.rar`, `.rar/.r00`, `.z01…/.zip`, `.001`), with gaps reported before any work starts.
+
+### Transactions
+
+Archive edits (`ArchiveService.modify`) extract to a private folder, apply the edits, rebuild the
+archive with the same format (and encryption, re-using the password), test it, check it contains
+exactly the expected files, and only then `rename(2)` it over the original. Conversion keeps the
+original and verifies the result by SHA-256 of every entry. Compression writes to a temporary file
+that is linked into place only after the engine succeeds.
+
+### Concurrency and progress
+
+Long operations take an `OperationProgress`: a thread-safe tracker that also carries cancellation
+and pause. In-process engines check it between blocks (pause blocks the worker at a checkpoint);
+helper processes are suspended with `SIGSTOP`/`SIGCONT` and terminated on cancel. The libarchive
+writer also checks it in its output callback. .xz and Brotli are encoded by the app itself
+(`XzEncoder`, `BrotliEncoder`) on libarchive's plain tar or raw output, so that cancellation works
+inside long encoder flushes (liblzma's multithreaded timeout) and xz memory stays within a budget
+(threads are reduced until the encoder fits in a quarter of physical memory). On failure the libarchive
+handle is marked failed before the temporary file is discarded, so nothing is flushed afterwards. The
+`OperationCenter` queue runs operations on GCD with a quality-of-service and concurrency limit
+derived from the performance mode and the machine (`SystemProfile`: P/E core counts via
+`hw.perflevel*`, Low Power Mode, thermal state).
+
+### Passwords
+
+Passwords are `Secret` byte buffers zeroed on release. Engines ask a `PasswordProvider` only when an
+archive needs one. The app's provider checks the Keychain first, then asks the user: the worker
+thread waits on a per-request `AnswerBox`, and the main thread is never blocked. Helper tools
+receive passwords on stdin in answer to their prompt, never as arguments. `CachingPasswordProvider`
+reuses a password across a multipart set or a batch.
+
+Saved passwords are generic-password items in the login keychain, which only Zipper can read
+without asking. "Require Touch ID or your login password" is enforced with LocalAuthentication
+before the item is read. Keychain access-control flags would need the data-protection keychain,
+and a Developer ID app only gets that with a provisioning profile.
+
+## The app
+
+**One main window, three places.** The sidebar holds Home, the open archives and Activity, and
+nothing else. Occasional utilities (test, repair, convert, batch, checksums, split/join, compare,
+duplicates) live in a separate **Tools** window, also reachable from the menu bar and the toolbar.
+Preferences are in the standard **Settings** window. Creating and extracting are focused
+**sheets** with one default button. Every operation runs in the background and shows up in
+**Activity**, in the toolbar and on the Dock tile. This keeps the first screen down to the three
+things people come to do: compress, extract, look inside.
+
+**Model / view split.** All state and rules live in `@Observable` classes under
+`Sources/ZipperMac/Model`:
+
+* `AppModel`: navigation, open archives, settings, prompts and running operations;
+* `BrowserState` and `FolderIndex`: an archive's folder tree, built once off the main thread with
+  collision-free row IDs, and cached sorted rows;
+* `CompressForm` and `ExtractForm`: what's valid, what gets scanned, what request is sent;
+* the tool models.
+
+Views only bind to them and call them. The model reaches the system through `PlatformServices`
+(implemented by `MacPlatform` with AppKit), so it builds and is unit-tested on Linux. That's how
+this repository type-checks every call the UI makes into the core without a Mac.
+
+**Prompts from background work.** Password and "item already exists" prompts are native
+`NSAlert`s. They're queued so they appear one at a time, whichever operation asked, and they don't
+depend on which SwiftUI sheet happens to be open. Each request gets its own answer box, so two
+concurrent operations can never receive each other's answers.
+
+**Running work.** `AppModel.run` enqueues on `OperationCenter`, which installs its completion
+handler *before* the work starts, so even an instant failure is reported. Each operation holds a
+`ProcessInfo` activity: App Nap can't throttle a long extraction in a hidden window, and the
+system won't terminate the app mid-write. Quitting with work in progress asks first, cancels, and
+waits briefly for partial output to be removed.
+
+## Extending: adding a format provider
+
+See [PluginInterface.md](PluginInterface.md). In short: implement `ArchiveEngine`, declare
+`EngineFormatSupport` honestly, route all extraction through the sink you are given, add the engine
+to `DefaultEngines.make()`, and add fixtures and interop tests. Engines are compiled into the
+signed app; there is deliberately no mechanism to load executable plug-ins at run time.
