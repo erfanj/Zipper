@@ -16,7 +16,7 @@ final class StressTests: XCTestCase {
 
     func randomFile(_ name: String, bytes: Int) -> URL {
         let url = work.appendingPathComponent(name)
-        FileManager.default.createFile(atPath: url.path, contents: nil)
+        _ = FileManager.default.createFile(atPath: url.path, contents: nil)
         let fh = try! FileHandle(forWritingTo: url)
         let random = FileHandle(forReadingAtPath: "/dev/urandom")!
         var left = bytes
@@ -102,7 +102,7 @@ final class StressTests: XCTestCase {
         for d in 0..<(count / 1000) {
             let dir = src.appendingPathComponent("d\(d)")
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            for i in 0..<1000 { FileManager.default.createFile(atPath: dir.appendingPathComponent("f\(i).txt").path, contents: Data("\(d)-\(i)".utf8)) }
+            for i in 0..<1000 { _ = FileManager.default.createFile(atPath: dir.appendingPathComponent("f\(i).txt").path, contents: Data("\(d)-\(i)".utf8)) }
         }
         let t0 = Date()
         let zip = try service.compress(CompressRequest(items: [src], destinationDirectory: work, settings: CompressionSettings(format: .zip, level: 1))).archives[0].outputs[0]

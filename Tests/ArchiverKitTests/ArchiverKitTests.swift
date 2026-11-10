@@ -209,7 +209,7 @@ final class CompressionServiceTests: XCTestCase {
         // Acceptance test 13. Sparse 4.3 GB file: compresses quickly and checks ZIP64 handling end to end.
         guard ProcessInfo.processInfo.environment["UA_RUN_LARGE_TESTS"] == "1" else { throw XCTSkip("Set UA_RUN_LARGE_TESTS=1 to run the >4 GB test") }
         let big = work.appendingPathComponent("big.bin")
-        FileManager.default.createFile(atPath: big.path, contents: nil)
+        _ = FileManager.default.createFile(atPath: big.path, contents: nil)
         let fh = try FileHandle(forWritingTo: big)
         try fh.truncate(atOffset: 4_400_000_000)
         try fh.seek(toOffset: 4_300_000_000)

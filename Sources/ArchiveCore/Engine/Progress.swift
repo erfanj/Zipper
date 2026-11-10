@@ -133,7 +133,7 @@ public final class OperationProgress: @unchecked Sendable {
     /// in-process engines pause between blocks without leaving data in an inconsistent state.
     public func checkCancelled() throws {
         pauseCondition.lock()
-        while _paused && !isCancelled { pauseCondition.wait(until: Date().addingTimeInterval(0.25)) }
+        while _paused && !isCancelled { _ = pauseCondition.wait(until: Date().addingTimeInterval(0.25)) }
         pauseCondition.unlock()
         if isCancelled { throw ArchiveError.cancelled }
     }

@@ -133,7 +133,7 @@ extension ArchiveService {
                 if group.count == 1 {
                     let u = group[0]
                     var isDir: ObjCBool = false
-                    FileManager.default.fileExists(atPath: u.path, isDirectory: &isDir)
+                    _ = FileManager.default.fileExists(atPath: u.path, isDirectory: &isDir)
                     // Streams keep the full file name ("notes.txt.gz"); containers drop the extension of a single file.
                     if isDir.boolValue || FormatCatalog.descriptor(for: settings.format)?.kind == .compressionStream { return u.lastPathComponent }
                     let stem = u.deletingPathExtension().lastPathComponent
@@ -212,7 +212,7 @@ public enum CloudFiles {
             }
             if pending.isEmpty { break }
             if Date() > deadline {
-                throw ArchiveError.io(path: pending[0].path, code: 0, message: "\(pending.count) cloud file(s) did not finish downloading. Check your network connection and available disk space, then try again.")
+                throw ArchiveError.io(path: pending[0].path, code: 0, message: "\(pending.count == 1 ? "A cloud file" : "\(pending.count) cloud files") did not finish downloading. Check your network connection and available disk space, then try again.")
             }
             Thread.sleep(forTimeInterval: 0.5)
         }
