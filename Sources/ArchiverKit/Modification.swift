@@ -88,7 +88,7 @@ extension ArchiveService {
                 for p in paths.map(ArchivePath.normalizeForDisplay) { expected = expected.filter { $0 != p && !$0.hasPrefix(p + "/") } }
             case .rename(let path, let newName):
                 let p = ArchivePath.normalizeForDisplay(path)
-                let parent = (p as NSString).deletingLastPathComponent
+                let parent = ArchivePath.parent(of: p)
                 let np = ArchivePath.join(parent, newName)
                 expected = Set(expected.map { $0 == p ? np : ($0.hasPrefix(p + "/") ? np + $0.dropFirst(p.count) : $0) })
             case .move(let path, let folder):
@@ -169,6 +169,8 @@ extension ArchiveService {
         if !sink.report.blocked.isEmpty {
             throw ArchiveError.notEditable(format: opened.detection.format, reason: "The archive contains entries with unsafe paths that would be lost by rebuilding it.")
         }
+        // Names this disk merged or renamed: rebuilding would quietly change the archive's contents.
+        if let conflict = NameConflicts.conflict(listing: opened.listing, report: sink.report, stagedIn: tree) { throw conflict }
 
         // 2. Apply edits to the extracted tree (all paths validated against the tree root).
         func local(_ archivePath: String) throws -> URL {
@@ -191,8 +193,17 @@ extension ArchiveService {
                 }
                 let src = try local(path)
                 let dst = src.deletingLastPathComponent().appendingPathComponent(newName)
-                guard !fm.fileExists(atPath: dst.path) else { throw ArchiveError.destinationExists(path: newName) }
-                try fm.moveItem(at: src, to: dst)
+                if fm.fileExists(atPath: dst.path) {
+                    // On a Mac's disk "Report.TXT" exists as soon as "report.txt" does: that is this very
+                    // item, and changing only the case of a name is a legitimate rename.
+                    guard NameConflicts.isRespelling(of: src, as: newName) else { throw ArchiveError.destinationExists(path: newName) }
+                    // rename(2) changes the spelling of a name in one step (FileManager refuses: "exists").
+                    guard rename(src.path, dst.path) == 0 else {
+                        throw ArchiveError.io(path: newName, code: errno, message: String(cString: strerror(errno)))
+                    }
+                } else {
+                    try fm.moveItem(at: src, to: dst)
+                }
             case .move(let path, let folder):
                 let src = try local(path)
                 let dstDir = folder.isEmpty ? tree : try local(folder)
@@ -212,9 +223,12 @@ extension ArchiveService {
                 }
             case .replace(let path, let file):
                 let dst = try local(path)
+                // New contents, same entry: it keeps its permissions (an edited script stays executable).
+                let mode = (try? fm.attributesOfItem(atPath: dst.path))?[.posixPermissions]
                 if fm.fileExists(atPath: dst.path) { try fm.removeItem(at: dst) }
                 try fm.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try fm.copyItem(at: file, to: dst)
+                if let mode { try? fm.setAttributes([.posixPermissions: mode], ofItemAtPath: dst.path) }
             }
         }
 
@@ -266,12 +280,19 @@ public final class ExternalEditSession: @unchecked Sendable {
     public init(service: ArchiveService, archive: URL, entryPath: String, readOptions: ReadOptions = ReadOptions()) throws {
         self.archive = archive
         self.entryPath = ArchivePath.normalizeForDisplay(entryPath)
+        // The caller hands the copy to the system to open, and the system runs some things instead of
+        // opening them. Those are refused; everything else is handed over without its executable bits
+        // (a file with them and no known type would be run in Terminal).
+        if ExecutableContent.runsWhenOpened(path: self.entryPath) {
+            throw ArchiveError.invalidArgument("“\((self.entryPath as NSString).lastPathComponent)” would be run or installed, not opened for editing. Extract it and open it from an editor instead.")
+        }
         directory = FileManager.default.temporaryDirectory.appendingPathComponent("ua-edit-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let outcome = try service.extract(ExtractRequest(archive: archive, destination: directory, mode: .here,
                                                          selection: .paths([self.entryPath]), readOptions: readOptions))
         guard let rel = outcome.report.writtenFiles.first else { throw ArchiveError.invalidArgument("“\(entryPath)” is not a file in the archive.") }
         fileURL = directory.appendingPathComponent(rel)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
         originalDigest = try StreamingHasher.hashFile(at: fileURL, algorithm: .sha256)
     }
 

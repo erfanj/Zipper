@@ -126,3 +126,69 @@ public enum TestFS {
         return (p.terminationStatus, String(decoding: data, as: UTF8.self))
     }
 }
+
+/// Builds small tar archives in memory, so hostile layouts don't need committed fixtures.
+public struct TarBuilder {
+    public enum Kind: UInt8 { case file = 0x30, symlink = 0x32, directory = 0x35 }
+    public private(set) var data = Data()
+
+    public init() {}
+
+    public mutating func add(_ name: String, kind: Kind = .file, content: String = "", link: String = "", mode: Int = 0o644) {
+        var header = [UInt8](repeating: 0, count: 512)
+        func put(_ s: String, at offset: Int, length: Int) {
+            let bytes = Array(s.utf8.prefix(length))
+            header.replaceSubrange(offset..<offset + bytes.count, with: bytes)
+        }
+        let body = Array(content.utf8)
+        put(name, at: 0, length: 100)
+        put(String(format: "%07o", kind == .directory ? 0o755 : mode), at: 100, length: 7)
+        put("0000000", at: 108, length: 7)
+        put("0000000", at: 116, length: 7)
+        put(String(format: "%011o", kind == .file ? body.count : 0), at: 124, length: 11)
+        put(String(format: "%011o", 1_700_000_000), at: 136, length: 11)
+        header.replaceSubrange(148..<156, with: [UInt8](repeating: 0x20, count: 8))
+        header[156] = kind.rawValue
+        put(link, at: 157, length: 100)
+        put("ustar", at: 257, length: 5)
+        put("00", at: 263, length: 2)
+        let sum = header.reduce(0) { $0 + Int($1) }
+        put(String(format: "%06o", sum), at: 148, length: 6)
+        header[154] = 0
+        header[155] = 0x20
+        data.append(contentsOf: header)
+        if kind == .file {
+            data.append(contentsOf: body)
+            data.append(contentsOf: [UInt8](repeating: 0, count: (512 - body.count % 512) % 512))
+        }
+    }
+
+    public func write(to url: URL) throws {
+        var out = data
+        out.append(contentsOf: [UInt8](repeating: 0, count: 1024))
+        try out.write(to: url)
+    }
+}
+
+extension TestFS {
+    /// A folder on a case-insensitive volume, as on a Mac's default APFS: the temporary folder when it
+    /// is one, else the folder named by UA_CASE_INSENSITIVE_DIR (on Linux, e.g. a `ciopfs` mount).
+    /// nil when neither is available.
+    public static func caseInsensitiveDir(_ label: String) -> URL? {
+        let fm = FileManager.default
+        var bases = [fm.temporaryDirectory]
+        if let custom = ProcessInfo.processInfo.environment["UA_CASE_INSENSITIVE_DIR"], !custom.isEmpty {
+            bases.insert(URL(fileURLWithPath: custom, isDirectory: true), at: 0)
+        }
+        for base in bases {
+            let dir = base.appendingPathComponent("ua-ci-\(label)-\(UUID().uuidString.prefix(8))", isDirectory: true)
+            guard (try? fm.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { continue }
+            _ = fm.createFile(atPath: dir.appendingPathComponent("Probe.txt").path, contents: Data())
+            let insensitive = fm.fileExists(atPath: dir.appendingPathComponent("pROBE.TXT").path)
+            try? fm.removeItem(at: dir.appendingPathComponent("Probe.txt"))
+            if insensitive { return dir }
+            try? fm.removeItem(at: dir)
+        }
+        return nil
+    }
+}

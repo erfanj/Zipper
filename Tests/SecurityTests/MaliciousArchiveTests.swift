@@ -166,6 +166,28 @@ final class MaliciousArchiveTests: XCTestCase {
         }
     }
 
+    /// A 2.5 KB damaged 7z, found by fuzzing. The in-process reader and 7-Zip reject it; The
+    /// Unarchiver's `lsar`, tried last when it is installed, asks for memory until there is none
+    /// (13 GB and still growing when the kernel stopped it). Opening it must end in an error, soon.
+    func testADamagedArchiveCannotMakeAHelperTakeAllTheMemory() throws {
+        let started = Date()
+        for attempt in ["open", "extract"] {
+            do {
+                if attempt == "open" { _ = try service.open(fixture("helper-memory.7z")) } else { _ = try extract("helper-memory.7z") }
+                XCTFail("\(attempt): a damaged archive was read without an error")
+            } catch let e as ArchiveError {
+                XCTAssertNotEqual(e.code, "internal", "\(attempt): \(e)")
+                XCTAssertFalse(e.explanation.isEmpty)
+                if case .safetyLimitExceeded(let kind, let limit, _) = e {
+                    XCTAssertEqual(kind, .helperMemory, "\(attempt)")
+                    XCTAssertLessThanOrEqual(limit, 2 << 30, "the old-format tools get 2 GB, not half the machine")
+                }
+            }
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 45, "the helper was left to grow")
+        assertContained()
+    }
+
     func testDeepNestingIsBounded() throws {
         var opts = ExtractionOptions()
         opts.limits.maxNestingDepth = 3

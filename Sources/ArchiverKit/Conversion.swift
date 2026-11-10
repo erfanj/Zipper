@@ -114,6 +114,8 @@ extension ArchiveService {
             try $0.extract(opened.source, selection: .all, into: sink, options: request.readOptions, progress: progress)
         }
         try sink.finish()
+        // Names this disk merged or renamed: the converted archive would not match the original.
+        if let conflict = NameConflicts.conflict(listing: opened.listing, report: sink.report, stagedIn: work) { throw conflict }
 
         progress.setPhase("Compressing")
         var settings = request.settings

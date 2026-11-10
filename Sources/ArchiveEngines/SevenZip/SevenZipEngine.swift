@@ -159,6 +159,9 @@ public final class SevenZipEngine: ArchiveEngine, @unchecked Sendable {
             let proc = HelperProcess(try exe(), args)
             proc.workingDirectory = cwd
             proc.progress = progress
+            // Listing, testing and extracting read what someone else made; the other commands
+            // rewrite an archive and need what its settings ask for.
+            if !["l", "t", "x", "e"].contains(args.first ?? "") { proc.memoryLimit = nil }
             proc.onStdoutChunk = onOutput
             proc.onPasswordPrompt = {
                 // 7-Zip may prompt more than once per run (e.g. while probing the archive type);
@@ -517,7 +520,7 @@ public final class SevenZipEngine: ArchiveEngine, @unchecked Sendable {
             cleanup.append(listURL)
             // Pass files, links and *empty* folders explicitly: naming a non-empty folder would make
             // 7-Zip add everything inside it, including items the user's filters excluded.
-            let dirsWithChildren = Set(items.map { ($0.archivePath as NSString).deletingLastPathComponent })
+            let dirsWithChildren = Set(items.map { ArchivePath.parent(of: $0.archivePath) })
             let paths = items.compactMap { item -> String? in
                 let rel = relativePath(item.url, to: URL(fileURLWithPath: base))
                 if item.type == .directory, dirsWithChildren.contains(item.archivePath) { return nil }
@@ -536,6 +539,7 @@ public final class SevenZipEngine: ArchiveEngine, @unchecked Sendable {
             let proc = HelperProcess(exe, args + ["-i@" + listURL.path, "--", tempURL.path])
             proc.workingDirectory = URL(fileURLWithPath: base)
             proc.progress = progress
+            proc.memoryLimit = nil   // creating: memory follows the chosen dictionary size and threads
             proc.onStdoutChunk = { chunk in
                 if let pct = Self.lastPercent(chunk) { progress.setProcessed(UInt64(Double(total) * Double(pct) / 100)) }
             }
@@ -640,6 +644,7 @@ public final class SevenZipEngine: ArchiveEngine, @unchecked Sendable {
         let proc = HelperProcess(try exe(), args)
         proc.workingDirectory = base
         proc.progress = progress
+        proc.memoryLimit = nil   // adding to an archive compresses
         proc.onPasswordPrompt = { password ?? options.passwordProvider?.password(for: workingCopy, reason: .required) }
         let r = try proc.run()
         if r.status >= 2 { throw Self.mapFailure(r, archive: workingCopy) }

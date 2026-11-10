@@ -32,7 +32,9 @@ extension AppModel {
                 Task { @MainActor in platform.reveal(items) }
             }
             var summary = "\(o.report.filesWritten) file\(o.report.filesWritten == 1 ? "" : "s") extracted"
-            if !o.report.blocked.isEmpty { summary += " · \(o.report.blocked.count) unsafe item(s) blocked" }
+            let skipped = o.report.skipped.filter { $0.reason.contains("already exists") }.count
+            if skipped > 0 { summary += " · \(skipped) existing item\(skipped == 1 ? "" : "s") skipped" }
+            if !o.report.blocked.isEmpty { summary += " · \(o.report.blocked.count) unsafe item\(o.report.blocked.count == 1 ? "" : "s") blocked" }
             if let v = o.verification { summary += v.passed ? " · verified" : " · verification found problems" }
             if !o.trashed.isEmpty { summary += " · archive moved to the Trash" }
             return summary

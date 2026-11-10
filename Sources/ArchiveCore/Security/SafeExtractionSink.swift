@@ -148,6 +148,8 @@ public final class SafeExtractionSink: ExtractionSink {
     private var dirRemap: [String: [String]] = [:]
     /// Normalised archive path → final components (for hard links).
     private var finalPaths: [String: [String]] = [:]
+    /// Symbolic links created by this extraction, checked again in `finish()`.
+    private var createdLinks: [(parent: [String], name: String, target: String, archivePath: String)] = []
     private var deferredDirs: [(components: [String], entry: ArchiveEntry)] = []
     private var createdDirs = Set<String>()
     private var topLevel = Set<String>()
@@ -273,6 +275,7 @@ public final class SafeExtractionSink: ExtractionSink {
 
     public func finish() throws {
         if let w = activeWriter { w.abort(); activeWriter = nil }
+        if options.linkPolicy == .preserveSafe { removeEscapingLinks() }
         // Apply directory metadata deepest-first, after their contents were written.
         for (comps, entry) in deferredDirs.sorted(by: { $0.components.count > $1.components.count }) {
             guard let fd = try? openDirectory(comps, create: false) else { continue }
@@ -527,6 +530,56 @@ public final class SafeExtractionSink: ExtractionSink {
         report.symlinksCreated += 1
         topLevel.insert((mappedParent + [name])[0])
         finalPaths[entry.normalizedPath] = mappedParent + [name]
+        createdLinks.append((mappedParent, name, target, entry.normalizedPath))
+    }
+
+    /// The check made when a link is created reads its target as text. That isn't enough: a target
+    /// can pass through another link ("up" -> "..", then "escape" -> "up/../secret" reads as
+    /// "sub/secret" and leads to "../secret"), in either order, or through a link the user already
+    /// had in the destination. Once everything is extracted, each new link is followed the way the
+    /// system would follow it, and those that end up outside the destination are removed.
+    private func removeEscapingLinks() {
+        let escaping = createdLinks.filter { !linkStaysInside(parent: $0.parent, target: $0.target) }
+        for link in escaping {
+            guard let fd = try? openDirectory(link.parent, create: false),
+                  POSIX.lstatAt(fd, link.name)?.isSymlink == true, unlinkat(fd, link.name, 0) == 0 else { continue }
+            report.symlinksCreated -= 1
+            report.blocked.append(.init(path: link.archivePath,
+                                        reason: "symbolic link leads outside the destination through another link (“\(link.target)”)"))
+            finalPaths[link.archivePath] = nil
+            if link.parent.isEmpty, POSIX.lstatAt(rootFD, link.name) == nil { topLevel.remove(link.name) }
+            progress?.warning()
+        }
+    }
+
+    /// Follows `target` from the directory `parent`, expanding every link on the way. False when the
+    /// path leaves the destination or reaches an absolute target. A chain too long for the system to
+    /// follow (or a loop) can't lead anywhere, so it counts as inside.
+    private func linkStaysInside(parent: [String], target: String) -> Bool {
+        if target.hasPrefix("/") { return false }
+        func parts(_ s: String) -> [String] { s.split(separator: "/", omittingEmptySubsequences: true).map(String.init) }
+        var current = parent          // real directories (or names that don't exist): links are expanded
+        var pending = parts(target)
+        var hops = 0
+        while !pending.isEmpty {
+            let part = pending.removeFirst()
+            if part == "." { continue }
+            if part == ".." {
+                if current.isEmpty { return false }
+                current.removeLast()
+                continue
+            }
+            let path = (current + [part]).joined(separator: "/")
+            if POSIX.lstatAt(rootFD, path)?.isSymlink == true {
+                hops += 1
+                if hops > 40 { return true }   // beyond MAXSYMLINKS on macOS (32) and Linux (40)
+                guard let next = POSIX.readLink(at: rootFD, path), !next.hasPrefix("/") else { return false }
+                pending = parts(next) + pending
+            } else {
+                current.append(part)
+            }
+        }
+        return true
     }
 
     private func createHardlink(_ entry: ArchiveEntry, components: [String]) throws {
@@ -719,7 +772,22 @@ public enum ExecutableContent {
         "scpt", "scptd", "applescript", "workflow", "action", "terminal", "pkg", "mpkg", "dmg",
         "jar", "exe", "msi", "bat", "cmd", "com", "ps1", "vbs", "js", "jse", "wsf", "scr", "dylib",
         "so", "kext", "plugin", "bundle", "osax", "prefpane", "saver", "webloc", "inetloc", "fileloc",
+        "url", "lnk", "mobileconfig", "safariextz", "hta", "reg", "cpl", "pif", "desktop", "appimage",
     ]
+
+    /// File types the system runs, installs or follows when asked to "open" them, whatever their
+    /// permissions: shell wrappers, Terminal and Automator documents, installers, disk images, Java
+    /// archives, links to somewhere else, configuration profiles.
+    public static let launchedWhenOpened: Set<String> = [
+        "app", "command", "tool", "terminal", "workflow", "action", "pkg", "mpkg", "dmg", "jar",
+        "webloc", "inetloc", "fileloc", "url", "mobileconfig", "scptd", "osax", "prefpane", "saver",
+        "safariextz", "exe", "msi", "bat", "cmd", "com", "scr", "lnk",
+    ]
+
+    public static func runsWhenOpened(path: String) -> Bool {
+        if path.split(separator: "/").contains(where: { $0.lowercased().hasSuffix(".app") }) { return true }
+        return launchedWhenOpened.contains((path as NSString).pathExtension.lowercased())
+    }
 
     public static func isPotentiallyExecutable(path: String, permissions: UInt16?, header: [UInt8]) -> Bool {
         let comps = path.split(separator: "/")

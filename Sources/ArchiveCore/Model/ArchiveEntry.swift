@@ -106,6 +106,15 @@ public enum ArchivePath {
         return p
     }
 
+    /// The folder part of an archive path: "a/b/c" → "a/b", "c" → "".
+    ///
+    /// Used instead of NSString.deletingLastPathComponent, which crashes in swift-corelibs-foundation
+    /// (Linux) when the path is a single one-character name such as "S" or "x".
+    public static func parent(of path: String) -> String {
+        guard let slash = path.lastIndex(of: "/") else { return "" }
+        return String(path[..<slash])
+    }
+
     public static func join(_ parent: String, _ name: String) -> String {
         parent.isEmpty ? name : parent + "/" + name
     }

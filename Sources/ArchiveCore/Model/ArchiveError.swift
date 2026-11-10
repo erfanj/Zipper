@@ -10,6 +10,8 @@ public enum SafetyLimitKind: String, Codable, Sendable {
     case duration = "processing time"
     case diskReserve = "free disk space reserve"
     case pathLength = "path length"
+    case helperMemory = "memory a helper program needed"
+    case helperTime = "time a helper program took"
 }
 
 /// Every failure surfaced to users is one of these. Each case carries enough context for a
@@ -44,6 +46,9 @@ public enum ArchiveError: Error, Sendable, Equatable {
     case notEditable(format: FormatID, reason: String)
     /// The archive was replaced or rewritten by someone else while an edit was being built.
     case changedDuringEdit(path: String)
+    /// Two entries this disk can't keep apart (names differing only by case, or the same name twice;
+    /// then `first == second`), in an operation that has to rebuild the archive from files on disk.
+    case conflictingNames(first: String, second: String)
     case internalError(String)
 
     /// Short title suitable for an alert.
@@ -76,6 +81,7 @@ public enum ArchiveError: Error, Sendable, Equatable {
         case .verificationFailed: return "Verification failed"
         case .notEditable: return "This archive can't be edited"
         case .changedDuringEdit: return "The archive was changed elsewhere"
+        case .conflictingNames: return "Names this disk can't tell apart"
         case .internalError: return "Unexpected error"
         }
     }
@@ -92,9 +98,9 @@ public enum ArchiveError: Error, Sendable, Equatable {
         case .noEngineAvailable(let f, let op, let hint):
             return "\(ProductInfo.name) recognises this \(FormatCatalog.descriptor(for: f)?.name ?? f.rawValue) file, but no installed engine can \(op) it." + (hint.map { " " + $0 } ?? "")
         case .engineUnavailable(let e, let reason):
-            return "The \(e.rawValue) engine can't be used: \(reason)"
+            return Self.sentence("The \(e.rawValue) engine can't be used: \(reason)")
         case .operationNotSupported(let f, let op, let reason):
-            return "\(FormatCatalog.descriptor(for: f)?.name ?? f.rawValue) archives don't support \(op). \(reason)"
+            return Self.sentence("\(FormatCatalog.descriptor(for: f)?.name ?? f.rawValue) archives don't support \(op). \(reason)")
         case .passwordRequired(let a):
             return "“\(Self.name(a))” is encrypted. Enter its password to continue."
         case .incorrectPassword(let a):
@@ -106,14 +112,18 @@ public enum ArchiveError: Error, Sendable, Equatable {
         case .unsupportedMethod(let m, let e):
             return "\(e.map { "“\($0)” uses" } ?? "The archive uses") a compression method (\(m)) that the selected engine doesn't support."
         case .damaged(let d):
-            return "The archive appears to be damaged. \(d)"
+            return Self.sentence("The archive appears to be damaged. \(d)")
         case .checksumMismatch(let e):
             return "“\(e)” didn't match its stored checksum. The extracted data is not identical to what was archived."
         case .missingVolume(let expected):
-            if expected.count == 1 { return "The archive is missing a part. Expected file: \(expected[0])" }
-            return "The archive is missing \(expected.count) parts: \(expected.joined(separator: ", "))"
+            if expected.count == 1 { return "The archive is missing a part: “\(expected[0])”." }
+            return "The archive is missing \(expected.count) parts: \(expected.joined(separator: ", "))."
         case .truncated(let d):
-            return "The archive ends unexpectedly; it may not have finished downloading. \(d)"
+            return Self.sentence("The archive ends unexpectedly; it may not have finished downloading. \(d)")
+        case .safetyLimitExceeded(.helperMemory, let limit, _):
+            return "The helper program reading this archive was stopped because it asked for more memory than \(ProductInfo.name) allows it (\(ByteFormatting.string(limit))). This usually means the archive is damaged, or was made to use up the computer's memory."
+        case .safetyLimitExceeded(.helperTime, let limit, _):
+            return "The helper program reading this archive was stopped after \(Self.fmt(.helperTime, limit)), far longer than an archive of this size takes. This usually means the archive is damaged, or was made to keep the computer busy."
         case .safetyLimitExceeded(let kind, let limit, let observed):
             return "Extraction stopped because the \(kind.rawValue) exceeded the safety limit (\(Self.fmt(kind, limit)); reached \(Self.fmt(kind, observed))). This protects against decompression bombs. If you trust this archive, raise the limit in Settings › Extraction."
         case .unsafePath(let p, let reason):
@@ -125,21 +135,26 @@ public enum ArchiveError: Error, Sendable, Equatable {
         case .permissionDenied(let p):
             return "\(ProductInfo.name) doesn't have permission to access “\(Self.name(p))”."
         case .io(let p, _, let message):
-            return "A read/write error occurred on “\(Self.name(p))”: \(message)"
+            return Self.sentence("A read/write error occurred on “\(Self.name(p))”: \(message)")
         case .externalTool(let tool, _, let message):
-            return "\(tool) reported an error: \(message)"
+            return Self.sentence("\(tool) reported an error: \(message)")
         case .cancelled:
             return "The operation was cancelled. Incomplete output was removed."
         case .invalidArgument(let m):
             return m
         case .verificationFailed(let d):
-            return "The result did not pass verification. \(d)"
+            return Self.sentence("The result did not pass verification. \(d)")
         case .notEditable(let f, let reason):
-            return "This \(FormatCatalog.descriptor(for: f)?.name ?? f.rawValue) archive can't be changed. \(reason)"
+            return Self.sentence("This \(FormatCatalog.descriptor(for: f)?.name ?? f.rawValue) archive can't be changed. \(reason)")
         case .changedDuringEdit(let p):
             return "“\(Self.name(p))” was changed by another app while \(ProductInfo.name) was updating it. Your change wasn't applied, so the other version is kept."
+        case .conflictingNames(let first, let second):
+            if first == second {
+                return "The archive has more than one item named “\(first)”, so it can't be rebuilt without renaming one of them. Nothing was changed."
+            }
+            return "“\(first)” and “\(second)” differ only by upper and lower case, and this disk treats them as the same name, so the archive can't be rebuilt here without renaming or merging them. Nothing was changed."
         case .internalError(let m):
-            return "An unexpected internal error occurred: \(m)"
+            return Self.sentence("An unexpected internal error occurred: \(m)")
         }
     }
 
@@ -156,15 +171,19 @@ public enum ArchiveError: Error, Sendable, Equatable {
         case .damaged, .checksumMismatch:
             return ["Obtain a fresh copy of the archive.", "Use Tools › Repair to recover the readable files."]
         case .noEngineAvailable(_, _, let hint):
-            return hint.map { [$0] } ?? ["See Settings › Advanced › Format capabilities."]
+            return hint.map { [$0] } ?? ["Settings › Advanced › Show Supported Formats lists what this Mac can open and create."]
         case .unsupportedMethod, .unsupportedEncryption:
-            return ["Try opening the archive with a different engine (Settings › Advanced).", "Ask the sender to recreate it as ZIP or 7z."]
+            return ["Ask the sender to recreate it as a standard ZIP or 7z.", "Settings › Advanced lists the engines installed on this Mac."]
+        case .safetyLimitExceeded(.helperMemory, _, _), .safetyLimitExceeded(.helperTime, _, _):
+            return ["If the archive comes from a source you trust, download or copy it again; it may be incomplete."]
         case .safetyLimitExceeded:
             return ["Only raise limits for archives from a source you trust."]
         case .insufficientSpace:
             return ["Free up disk space or choose a destination on another disk."]
         case .permissionDenied:
             return ["Choose a different destination, or grant access in System Settings › Privacy & Security."]
+        case .conflictingNames:
+            return ["Extract the archive instead: every item is kept, with a number added to one of the names."]
         case .changedDuringEdit:
             return ["Open the archive again to see the current version, then repeat your change."]
         case .notEditable:
@@ -204,6 +223,7 @@ public enum ArchiveError: Error, Sendable, Equatable {
         case .verificationFailed: return "verification-failed"
         case .notEditable: return "not-editable"
         case .changedDuringEdit: return "changed-during-edit"
+        case .conflictingNames: return "conflicting-names"
         case .internalError: return "internal"
         }
     }
@@ -212,11 +232,24 @@ public enum ArchiveError: Error, Sendable, Equatable {
         (path as NSString).lastPathComponent
     }
 
+    /// A message with a detail appended (an engine's or the system's own words) still has to read
+    /// as a finished sentence: no dangling colon when the detail is empty, a full stop at the end.
+    static func sentence(_ text: String) -> String {
+        var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        while let last = t.last, last == ":" || last == ";" || last == "," {
+            t.removeLast()
+            t = t.trimmingCharacters(in: .whitespaces)
+        }
+        guard let last = t.last else { return t }
+        return ".!?…".contains(last) ? t : t + "."
+    }
+
     private static func fmt(_ kind: SafetyLimitKind, _ v: UInt64) -> String {
         switch kind {
-        case .totalSize, .entrySize, .diskReserve: return ByteFormatting.string(v)
+        case .totalSize, .entrySize, .diskReserve, .helperMemory: return ByteFormatting.string(v)
         case .expansionRatio: return "\(v):1"
         case .duration: return "\(v) s"
+        case .helperTime: return v >= 120 ? "\(v / 60) minutes" : (v == 1 ? "1 second" : "\(v) seconds")
         default: return "\(v)"
         }
     }

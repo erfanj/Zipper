@@ -15,6 +15,19 @@ public final class UnarEngine: ArchiveEngine, @unchecked Sendable {
     let unar: URL?
     private let table: [FormatID: EngineFormatSupport]
 
+    /// These tools read old formats with small dictionaries, and their parsers trust size fields:
+    /// lsar grew past 13 GB on a 2.5 KB damaged 7z. 2 GB covers the largest real need (a 1.5 GB
+    /// 7z dictionary) and is reached within seconds.
+    static let memoryLimit: UInt64 = 2 << 30
+
+    /// Their decoders can also loop forever on damaged data (a 3 KB .xz does it). Each run gets two
+    /// minutes plus half a minute per megabyte of archive: no real archive is that slow, and a
+    /// small file can't keep the computer busy for ever.
+    let baseTimeLimit: TimeInterval
+    func timeLimit(for source: ArchiveSource) -> TimeInterval {
+        baseTimeLimit + 30 * Double(source.totalSize) / 1_000_000
+    }
+
     static let formats: [FormatID] = [
         .stuffIt, .stuffItX, .compactPro, .packIt, .diskDoubler, .macBinary, .binHex, .appleSingle, .appleDouble,
         .arc, .zoo, .alz, .egg, .lbr, .squeeze, .amigaLZX, .dms, .adf, .powerPacker, .ace, .arj, .lha, .cab,
@@ -22,7 +35,8 @@ public final class UnarEngine: ArchiveEngine, @unchecked Sendable {
         .warc, .chm, .msi, .lzop, .cbr, .cbz,
     ]
 
-    public init(lsar: URL? = HelperLocator.find(["lsar"]), unar: URL? = HelperLocator.find(["unar"])) {
+    public init(lsar: URL? = HelperLocator.find(["lsar"]), unar: URL? = HelperLocator.find(["unar"]), baseTimeLimit: TimeInterval = 120) {
+        self.baseTimeLimit = baseTimeLimit
         self.lsar = lsar
         self.unar = unar
         var version: String?
@@ -67,7 +81,11 @@ public final class UnarEngine: ArchiveEngine, @unchecked Sendable {
         var args = ["-j"]
         if let enc = options.filenameEncoding { args += ["-e", enc] }
         args += ["--", source.url.path]
-        let r = try HelperProcess(lsar, args).run()
+        let lister = HelperProcess(lsar, args)
+        lister.progress = progress
+        lister.memoryLimit = Self.memoryLimit
+        lister.timeLimit = timeLimit(for: source)
+        let r = try lister.run()
         guard let data = r.stdout.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw Self.map(r, source.url)
@@ -127,6 +145,8 @@ public final class UnarEngine: ArchiveEngine, @unchecked Sendable {
         defer { watchdog.stop() }
         let proc = HelperProcess(unar, args)
         proc.progress = progress
+        proc.memoryLimit = Self.memoryLimit
+        proc.timeLimit = timeLimit(for: source)
         let r: HelperProcess.Result
         do { r = try proc.run() } catch ArchiveError.cancelled { throw watchdog.tripped ?? .cancelled }
         if let w = watchdog.tripped { throw w }
@@ -140,7 +160,11 @@ public final class UnarEngine: ArchiveEngine, @unchecked Sendable {
     public func test(_ source: ArchiveSource, options: ReadOptions, progress: OperationProgress) throws -> IntegrityReport {
         let (lsar, _) = try tools()
         let listing = try list(source, options: options, progress: progress)
-        let r = try HelperProcess(lsar, ["-t", "--", source.url.path]).run()
+        let tester = HelperProcess(lsar, ["-t", "--", source.url.path])
+        tester.progress = progress
+        tester.memoryLimit = Self.memoryLimit
+        tester.timeLimit = timeLimit(for: source)
+        let r = try tester.run()
         var report = IntegrityReport(archive: source.url.lastPathComponent, format: source.format, engine: id)
         report.filesInspected = listing.fileCount
         report.directories = listing.directoryCount
