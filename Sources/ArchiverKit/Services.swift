@@ -84,7 +84,8 @@ public final class ActivityHistory: @unchecked Sendable {
         guard let d = try? Data(contentsOf: fileURL) else { return [] }
         let dec = JSONDecoder()
         dec.dateDecodingStrategy = .iso8601
-        return (try? dec.decode([HistoryRecord].self, from: d)) ?? []
+        // Entry by entry: one unreadable record must not empty (and then overwrite) the whole history.
+        return (try? dec.decode(LossyArray<HistoryRecord>.self, from: d))?.elements ?? []
     }
 
     private func saveUnlocked(_ all: [HistoryRecord]) {

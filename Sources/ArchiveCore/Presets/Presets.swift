@@ -127,10 +127,17 @@ public final class PresetStore: @unchecked Sendable {
 
     public init(fileURL: URL) { self.fileURL = fileURL }
 
+    /// Presets that can be read. If some (or all) of the file can't, a copy of it is kept as
+    /// "<name>.unreadable.json" before anything overwrites it: presets are the user's own work.
     public func load() -> [Preset] {
         lock.lock(); defer { lock.unlock() }
-        guard let data = try? Data(contentsOf: fileURL) else { return [] }
-        return (try? Self.decoder.decode([Preset].self, from: data)) ?? []
+        guard let data = try? Data(contentsOf: fileURL), !data.isEmpty else { return [] }
+        let decoded = try? Self.decoder.decode(LossyArray<Preset>.self, from: data)
+        if decoded == nil || decoded!.skipped > 0 {
+            let backup = fileURL.deletingPathExtension().appendingPathExtension("unreadable.json")
+            if !FileManager.default.fileExists(atPath: backup.path) { try? data.write(to: backup, options: .atomic) }
+        }
+        return decoded?.elements ?? []
     }
 
     public func save(_ presets: [Preset]) throws {
