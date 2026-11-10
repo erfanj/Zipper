@@ -111,6 +111,45 @@ final class CLITests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("a.zip").path))
     }
 
+    /// A mistyped option used to be ignored: `--encypt aes256` made an archive with no password,
+    /// `--hide-name` left the names readable, and `-d out` extracted into the current folder.
+    func testUnknownOptionsStopTheCommand() throws {
+        let cases: [(args: [String], hint: String?)] = [
+            (["compress", "src", "-o", "a.zip", "--encypt", "aes256"], "--encrypt"),
+            (["compress", "src", "-o", "a.7z", "--hide-name"], "--hide-names"),
+            (["compress", "src", "-o", "a.zip", "--verfy"], "--verify"),
+            (["compress", "src", "-o", "a.zip", "--no-hiden"], "--no-hidden"),
+            (["extract", "nothing.zip", "-d", "out"], nil),
+            (["extract", "nothing.zip", "--overwrite"], nil),
+            (["extract", "nothing.zip", "--verify=yes"], nil),
+            (["list", "nothing.zip", "--bogus"], nil),
+        ]
+        for c in cases {
+            let p = Process()
+            p.executableURL = Self.binary
+            p.arguments = c.args
+            p.currentDirectoryURL = dir
+            p.standardOutput = FileHandle.nullDevice
+            let err = Pipe()
+            p.standardError = err
+            try p.run()
+            let text = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            p.waitUntilExit()
+            XCTAssertEqual(p.terminationStatus, 2, "zipper \(c.args.joined(separator: " ")): \(text)")
+            if let hint = c.hint { XCTAssertTrue(text.contains("Did you mean \(hint)?"), "zipper \(c.args.joined(separator: " ")): \(text)") }
+        }
+        let made = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasPrefix("a.") || $0 == "out" }
+        XCTAssertEqual(made, [], "nothing is created by a command that was refused")
+
+        // --help after a command shows the usage, and a name that starts with a dash still works after "--".
+        let help = try zipper("extract", "--help")
+        XCTAssertEqual(help.code, 0)
+        XCTAssertTrue(help.output.contains("Usage:"))
+        try Data("dash".utf8).write(to: dir.appendingPathComponent("-x"))
+        let dashed = try zipper("compress", "-o", "dash.zip", "--", "-x")
+        XCTAssertEqual(dashed.code, 0, dashed.output)
+    }
+
     func testValidSpellingsStillWork() throws {
         XCTAssertEqual(try zipper("compress", "src", "-o", "p.zip", "--performance", "energy-saver", "--threads", "2").code, 0)
         let h = try zipper("hash", "src/readme.txt", "--algo", "SHA-512")
