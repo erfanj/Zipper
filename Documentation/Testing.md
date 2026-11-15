@@ -26,6 +26,11 @@ and libraries; point the tests at that 7-Zip with
 7-Zip must be the official program, 21.00 or later: older p7zip builds (macOS runners ship 17.05)
 are ignored, because they mishandle non-ASCII ZIP passwords.
 
+On a Mac, `Scripts/mac-check.sh` runs what the macOS CI job runs (pinned libraries, app build, bundle
+check, the package tests against the bundled 7-Zip, the UI tests) and, with `--dmg`, the release
+build and its smoke test. It writes `build/mac-check/REPORT.txt` and one log per step. It was written
+without a Mac to hand (GitHub Actions was unavailable), so treat its first run as its own test.
+
 ## Inventory
 
 | Target | Suites | Tests | What it covers |
