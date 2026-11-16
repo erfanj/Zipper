@@ -39,6 +39,10 @@ cd ../erfanj.github.io && git add -A && git commit -m "Update Zipper page" && gi
 
 GitHub Pages republishes within a minute or two.
 
+**Bump the `?v=` date in `index.html` every time you publish** (it's on the `styles.css`,
+`config.js` and `main.js` lines). Browsers keep those files for up to 10 minutes; a new `?v=`
+makes them fetch the new ones right away, so a changed download link takes effect immediately.
+
 ## Publish a new version of Zipper
 
 1. Build the DMG (`Scripts/release.sh`, see `Documentation/Distribution.md`) and publish it as a
