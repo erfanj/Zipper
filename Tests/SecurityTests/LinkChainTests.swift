@@ -25,13 +25,20 @@ final class LinkChainTests: XCTestCase {
     /// Every symbolic link below `root` must resolve to something inside `root` (or to nothing).
     func assertNoLinkLeavesTheDestination(_ root: URL, file: StaticString = #filePath, line: UInt = #line) {
         let fm = FileManager.default
-        let rootPath = root.resolvingSymlinksInPath().path
+        // On macOS the temporary folder is /var/folders/…, itself a link to /private/var/folders/….
+        // Foundation drops "/private" from a path it resolved and keeps it on one it couldn't
+        // resolve (a link loop), so both sides are compared without it.
+        func comparable(_ path: String) -> String {
+            for top in ["/var/", "/tmp/", "/etc/"] where path.hasPrefix("/private" + top) { return String(path.dropFirst("/private".count)) }
+            return path
+        }
+        let rootPath = comparable(root.resolvingSymlinksInPath().path)
         guard let walker = fm.enumerator(at: root, includingPropertiesForKeys: [.isSymbolicLinkKey], options: []) else { return }
         for case let url as URL in walker {
             guard (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true else { continue }
-            let resolved = url.resolvingSymlinksInPath().path
+            let resolved = comparable(url.resolvingSymlinksInPath().path)
             XCTAssertTrue(resolved == rootPath || resolved.hasPrefix(rootPath + "/"),
-                          "“\(url.path.dropFirst(rootPath.count))” -> \(resolved) leaves the destination", file: file, line: line)
+                          "“\(comparable(url.path).dropFirst(rootPath.count))” -> \(resolved) leaves the destination", file: file, line: line)
             if let text = try? String(contentsOf: url, encoding: .utf8) {
                 XCTAssertFalse(text.contains("private data"), "the link at \(url.lastPathComponent) reads a file outside the destination", file: file, line: line)
             }

@@ -133,10 +133,10 @@ is what a release needs; the last column says honestly how far each part got.
 | 9 | Build hygiene | Zero compiler warnings in app, tools and tests; `shellcheck` on the build and release scripts | Done: all warnings fixed (P13); the scripts' two remaining notes are harmless |
 | 10 | Data races in the new code | The suites that touch what changed (66 tests: helpers, 7-Zip, hostile archives, links, edits, saved state, operations) under Thread Sanitizer | Done: no race |
 | 11 | Fuzzing, again | The 660 mutated archives on each disk, a 4,400-archive sweep, and 30,000 mutations fed straight to `lsar`, all with a watcher on the helpers' memory | Done: P9 |
-| 12 | The release itself | Universal Release build, DMG, signature, notarization, Gatekeeper on a clean Mac, installing over an older version | **Not done.** Needs macOS; GitHub Actions refuses every job for this repository (no runner is assigned; the run fails in 1 to 4 s) |
-| 13 | The app's windows | The 10 XCUITests on this branch, an accessibility audit, VoiceOver, keyboard-only use, dark mode, large text | **Not done**, same reason |
-| 14 | Mac integration | Finder Quick Actions, Quick Look in Finder, drag and drop, Dock progress, notifications, Shortcuts, Keychain and Touch ID, iCloud Drive, exFAT and network disks | **Not done**, same reason |
-| 15 | Performance on a Mac | Speed, memory and energy on Apple silicon with a large archive | **Not done**, same reason |
+| 12 | The release itself | Universal Release build, DMG, signature, notarization, Gatekeeper on a clean Mac, installing over an older version | **Partly done** on a Mac (see "First run on a Mac"): the universal Release build, the ad-hoc signed DMG and its smoke test pass, Intel slice included. Not done: Developer ID signing, notarization, Gatekeeper on a clean Mac, installing over an older version |
+| 13 | The app's windows | The 10 XCUITests on this branch, an accessibility audit, VoiceOver, keyboard-only use, dark mode, large text | **Partly done**: the 10 XCUITests pass on a Mac. Not done: the accessibility audit, VoiceOver, keyboard-only use, dark mode, large text |
+| 14 | Mac integration | Finder Quick Actions, Quick Look in Finder, drag and drop, Dock progress, notifications, Shortcuts, Keychain and Touch ID, iCloud Drive, exFAT and network disks | **Not done**: needs a person at a Mac |
+| 15 | Performance on a Mac | Speed, memory and energy on Apple silicon with a large archive | **Not done**, apart from the slow listing found and fixed below (M2) |
 
 ### Findings
 
@@ -163,22 +163,60 @@ extension is sandboxed and read-only; helper programs are looked up only in fixe
 refused if others can write to them; previews are read-only copies in a private folder; damaged
 state files never stop the app from launching.
 
+### First run on a Mac
+
+On 2026-11-15 the branch was built and tested on a Mac for the first time: macOS 26.6.2, Apple
+silicon, 16 GB, Xcode 27.0 (Swift 6.4), with `Scripts/mac-check.sh --dmg`. The first complete run
+failed three of its nine steps; after the fixes below all nine pass.
+
+| Step | Result |
+|---|---|
+| Pinned libraries and 7-Zip, Xcode project, Debug app build | Pass, 0 compiler warnings |
+| App bundle: signature, helpers, Quick Look extension | Pass |
+| Package tests (`swift test`, bundled libarchive 3.8.9 and 7-Zip 26.04) | 246 tests, 0 failures, 5 skipped (the >4 GB test, 2 that need `rar`, the case-sensitive-disk test, and the test that needs The Unarchiver's `unar`/`lsar`, which weren't installed). Interop: 63 passed, 14 skipped, 0 failed |
+| UI tests (XCUITest) | 10 tests, 0 failures |
+| Release DMG: universal, ad-hoc signed (no Developer ID) | Pass: every binary has both architectures, the image verifies |
+| Smoke test of the release app | Pass: encrypted 7z round trip, the Intel slice under Rosetta, launch, open an archive, quit |
+
+What it found:
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| M1 | Medium (Mac only) | **Every helper program run left two file descriptors open, and every look at a helper's memory one.** On macOS a pipe's reading end that has had a handler attached isn't closed when the last reference goes. Row 5 above found no leak because Linux closes them. 60 rounds of operations left 408 descriptors open; an app left open for days of 7-Zip work would have reached the limit (256 by default for an app started from Finder) and then failed to open anything. | Both ends are closed as soon as the helper has finished. `ResourceHygieneTests` now passes on a Mac, and `HelperLimitTests` has a test for exactly this. |
+| M2 | Medium (Mac only) | **Opening an archive with very many entries was slow**: listing 202,000 entries took 10.9 s. The browser asked the system for each file's kind ("PDF document") once per entry, about 50 µs each. | Asked once per extension and remembered. |
+| M3 | Build | The UI tests couldn't start: the test bundle was built with the hardened runtime and an ad-hoc signature, and macOS refuses to load that into the test runner ("different Team IDs"). | The test bundle is built without the hardened runtime (`project.yml`). The app keeps it. |
+| M4 | Build | `Scripts/release.sh` rejected a correct universal app ("Zipper isn't universal (has: x86_64 arm64)"): Xcode 27's `lipo -verify_arch` takes one architecture per call. The same call made the script rebuild the libraries every time. | One architecture per call. |
+| M5 | Code health | One compiler warning in the notification code (objects that aren't safe to hand to another thread were captured by a callback). | The request is built inside the callback. |
+| M6 | Test | `LinkChainTests.testLinkLoopsAreHarmless` failed on a Mac though the app was right: the test compared `/var/…` with `/private/var/…`, which are the same folder there. | The test compares them as the same. |
+| M7 | Script | `Scripts/mac-check.sh` itself, on its first run: it needed the system's developer directory switched to Xcode; it spent ten minutes failing every step when Xcode's licence hadn't been accepted; it exported `UA_HELPERS_DIR` for the rest of the run, which would have let the UI tests and the smoke test find 7-Zip outside an app bundle that lacked it; it reported the test count of the last test bundle only; and it could mistake an older DMG for the one just built. | All fixed. It uses the Xcode in /Applications by itself and stops at the first step with what to do when Xcode can't run. |
+
+The helper memory guard's macOS path (reading a helper's memory through `/bin/ps`), unproven until
+now, is exercised by `HelperLimitTests` and passes.
+
 ### What this does not show
 
-Nothing in this pass ran on a Mac. The code compiles and passes on Linux, where the app's model
-layer and everything below it are the same code; the SwiftUI views, the Quick Look extension and the
-macOS-only engines were not compiled for this branch at all. Before this is released, rows 12 to 15
-above need to run. Once GitHub Actions accepts jobs again, the CI workflow builds the app and runs
-the UI tests of row 13 on this branch (re-run it; the last commit message carries `[macos]`), and the
-release workflow builds and smoke-tests the DMG of row 12. Rows 14 and 15, and the parts of 12 and 13
-no workflow covers, are an afternoon by hand with the checklist in
-[Distribution.md](Distribution.md). Two things are worth adding then, since they can't be written
-blind: an XCUITest that calls `performAccessibilityAudit()` on each window, and a timing run on Apple
-silicon. One piece of this pass is Mac-specific and so unproven: on macOS the helper memory guard
-reads a helper's memory through `/bin/ps`; that code path is tested here on Linux, not on a Mac.
+The automated part of rows 12 and 13 has now run on one Mac, on one macOS version. Still not done,
+and needed before a public release:
+
+* **Signing and notarization.** The release build here is ad-hoc signed on purpose (no Developer ID
+  was used). Gatekeeper blocks such an app on any other Mac. Developer ID signing, notarization,
+  Gatekeeper on a clean Mac and installing over an older version are untested.
+* **The rest of row 13**: an accessibility audit (an XCUITest that calls
+  `performAccessibilityAudit()` on each window is worth adding), VoiceOver, keyboard-only use, dark
+  mode, large text.
+* **Rows 14 and 15**: Finder Quick Actions, Quick Look in Finder, drag and drop, Dock progress,
+  notifications, Shortcuts, Keychain and Touch ID, iCloud Drive, exFAT and network disks; speed,
+  memory and energy with a large archive. These are an afternoon by hand with the checklist in
+  [Distribution.md](Distribution.md).
+* The Unarchiver's tools weren't installed on the Mac, so the test with the real damaged archive
+  and the real `lsar` was skipped there (it passes on Linux).
+* GitHub Actions still hasn't run this branch; the macOS CI job does what `Scripts/mac-check.sh`
+  does and should agree with it.
 
 | | Before this pass | After |
 |---|---|---|
 | Package tests (`swift test`, Linux) | 203 (3 skipped) | 245 (11 skipped), 0 failures |
 | The same on a case-insensitive volume | not run | 245 (4 skipped), 0 failures |
-| Compiler warnings | some, in sources and tests | 0 |
+| Package tests on macOS | not run | 246 (5 skipped), 0 failures |
+| UI tests on macOS | not run | 10, 0 failures |
+| Compiler warnings | some, in sources and tests | 0 (Linux and Xcode 27) |

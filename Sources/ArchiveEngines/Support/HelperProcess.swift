@@ -103,6 +103,9 @@ final class HelperProcess {
         ps.standardInput = FileHandle.nullDevice
         guard (try? ps.run()) != nil else { return nil }
         let data = out.fileHandleForReading.readDataToEndOfFile()
+        // This runs once a second for as long as a helper does: the descriptor is closed now, not
+        // whenever the handle happens to be deallocated.
+        try? out.fileHandleForReading.close()
         ps.waitUntilExit()
         let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         guard ps.terminationStatus == 0, let kilobytes = UInt64(text) else { return nil }
@@ -278,6 +281,10 @@ final class HelperProcess {
         let restOut = outPipe.fileHandleForReading.readDataToEndOfFile()
         let restErr = errPipe.fileHandleForReading.readDataToEndOfFile()
         try? stdinHandle.close()
+        // Closed here, not left to deallocation: on macOS a handle that has had a readability
+        // handler keeps its descriptor open after the last reference is gone, two per helper run.
+        try? outPipe.fileHandleForReading.close()
+        try? errPipe.fileHandleForReading.close()
         shared.lock.lock()
         shared.out.append(restOut)
         shared.err.append(restErr)

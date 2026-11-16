@@ -38,7 +38,9 @@ mkdir -p build dist
 step "Dependencies"
 WANT="$(shasum -a 256 Scripts/build-deps-macos.sh | cut -d' ' -f1) arm64 x86_64"
 LIB="Vendor/macos/xcframeworks/CArchive.xcframework/macos-arm64_x86_64/libCArchive.a"
-if [[ "$(cat Vendor/macos/.build-stamp 2>/dev/null)" == "$WANT" && -f "$LIB" ]] && lipo "$LIB" -verify_arch arm64 x86_64 2>/dev/null; then
+# lipo's -verify_arch takes one architecture per call in current Xcode, so each is checked on its own.
+universal() { lipo "$1" -verify_arch arm64 2>/dev/null && lipo "$1" -verify_arch x86_64 2>/dev/null; }
+if [[ "$(cat Vendor/macos/.build-stamp 2>/dev/null)" == "$WANT" && -f "$LIB" ]] && universal "$LIB"; then
   echo "Universal libraries already built."
 else
   Scripts/build-deps-macos.sh --universal
@@ -96,7 +98,7 @@ BINARIES=("$APP/Contents/MacOS/Zipper" "$APP/Contents/PlugIns/ZipperQuickLook.ap
 for helper in "$APP/Contents/Helpers/"*; do BINARIES+=("$helper"); done
 for bin in "${BINARIES[@]}"; do
   [[ -f "$bin" ]] || fail "missing $bin"
-  lipo "$bin" -verify_arch arm64 x86_64 || fail "$(basename "$bin") isn't universal (has: $(lipo -archs "$bin"))"
+  universal "$bin" || fail "$(basename "$bin") isn't universal (has: $(lipo -archs "$bin"))"
   echo "$(basename "$bin"): $(lipo -archs "$bin")"
 done
 [[ -x "$APP/Contents/Helpers/7zz" ]] || fail "7-Zip isn't bundled"

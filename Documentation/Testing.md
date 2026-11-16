@@ -28,8 +28,10 @@ are ignored, because they mishandle non-ASCII ZIP passwords.
 
 On a Mac, `Scripts/mac-check.sh` runs what the macOS CI job runs (pinned libraries, app build, bundle
 check, the package tests against the bundled 7-Zip, the UI tests) and, with `--dmg`, the release
-build and its smoke test. It writes `build/mac-check/REPORT.txt` and one log per step. It was written
-without a Mac to hand (GitHub Actions was unavailable), so treat its first run as its own test.
+build and its smoke test. It writes `build/mac-check/REPORT.txt` and one log per step. It needs Xcode
+installed with its licence accepted (`sudo xcodebuild -license`) and Homebrew; it finds the Xcode in
+/Applications even when the system still points at the Command Line Tools. The UI tests use the
+keyboard and mouse for about three minutes.
 
 ## Inventory
 
@@ -72,6 +74,14 @@ On 2026-11-10, 245 tests, on the production-readiness branch (see [TestReport.md
 | Ubuntu 24.04, x86_64, local (Swift 6.1.3, libarchive 3.7.2, 7-Zip, unar) | **0 failures**, 11 skipped (the 8 case-insensitive-disk tests, 2 that need `rar`, the >4 GB test) |
 | The same, with every temporary folder on a case-insensitive volume | **0 failures**, 4 skipped |
 | macOS | **not run**: GitHub Actions accepted no jobs for the repository at the time |
+
+On 2026-11-15, the same branch on a Mac with `Scripts/mac-check.sh --dmg`, 246 tests (one added):
+
+| Where | Result |
+|---|---|
+| macOS 26.6.2, Apple silicon (Xcode 27.0, Swift 6.4), bundled libarchive 3.8.9 and 7-Zip 26.04 | **0 failures**, 5 skipped (the >4 GB test, 2 that need `rar`, the case-sensitive-disk test, the one that needs `unar`/`lsar`). Interop: 63 passed, 0 failed, 14 skipped |
+| The same Mac, UI tests (XCUITest) | 10 tests, **0 failures** |
+| The same Mac, universal ad-hoc signed release DMG and its smoke test | passed |
 
 The inventory above predates the end-to-end, robustness and readiness passes; the suites they added
 (`AppFlowTests`, `CLITests`, `RobustnessTests`, `LeftoverTests`, `LinkChainTests`,

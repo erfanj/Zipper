@@ -163,6 +163,26 @@ final class HelperLimitTests: XCTestCase {
         XCTAssertNil(HelperProcess.residentMemoryFromPS(0x3FFF_FFF0), "no such process")
     }
 
+    /// On macOS a pipe's read handle kept its descriptor after a helper run (two per run), and the
+    /// memory guard's `ps` kept one per look: an app that stays open for days ran out of them.
+    func testRunningHelpersLeavesNoDescriptorsOpen() throws {
+        func openDescriptors() -> Int {
+            let path = FileManager.default.fileExists(atPath: "/proc/self/fd") ? "/proc/self/fd" : "/dev/fd"
+            return (try? FileManager.default.contentsOfDirectory(atPath: path))?.count ?? -1
+        }
+        let own = ProcessInfo.processInfo.processIdentifier
+        let perl = try perl()
+        func round() throws {
+            XCTAssertEqual(try HelperProcess(perl, ["-e", "print 'out'; print STDERR 'err';"]).run().stdout, "out")
+            XCTAssertEqual(try HelperProcess(perl, ["-e", "exit 3;"]).run().status, 3)
+            _ = HelperProcess.residentMemoryFromPS(own)
+        }
+        try round()   // one-time descriptors settle here
+        let before = openDescriptors()
+        for _ in 0..<25 { try round() }
+        XCTAssertLessThanOrEqual(openDescriptors() - before, 2, "descriptors left open by 50 helper runs and 25 looks at the memory")
+    }
+
     func testTheDefaultLimitLeavesRoomForRealArchives() {
         // The largest dictionaries in use are 1.5 GB (7z) and 1 GB (RAR 5).
         XCTAssertGreaterThanOrEqual(HelperProcess.defaultMemoryLimit, 2 << 30)
