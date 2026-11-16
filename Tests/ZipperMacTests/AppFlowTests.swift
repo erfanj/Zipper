@@ -49,7 +49,7 @@ final class RecordingPlatform: PlatformServices {
 
 /// Waits (without blocking the main actor) until `condition` holds.
 func eventually(_ what: String, timeout: TimeInterval = 30, file: StaticString = #filePath, line: UInt = #line,
-                _ condition: @MainActor () -> Bool) async {
+                _ condition: @MainActor @Sendable () -> Bool) async {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
         if await MainActor.run(body: condition) { return }
@@ -1341,14 +1341,14 @@ final class LifetimeTests: AppFlowTestCase {
     }
 
     func testAppModelIsFreedAfterOpeningEditingAndClosing() async throws {
-        weak var weakModel: AppModel?
-        weak var weakState: BrowserState?
+        @MainActor final class Watch { weak var model: AppModel?; weak var state: BrowserState? }
+        let watch = await MainActor.run { Watch() }
         do {
             let model = await MainActor.run { makeModel() }
-            await MainActor.run { weakModel = model }
+            await MainActor.run { watch.model = model }
             let state = await openAndWait(model, zip)
             await MainActor.run {
-                weakState = state
+                watch.state = state
                 model.test(state)
                 model.createFolder(named: "New", in: state)
             }
@@ -1363,8 +1363,85 @@ final class LifetimeTests: AppFlowTestCase {
         // Let pending main-actor work (completion handlers, reloads) drain.
         for _ in 0..<20 { await MainActor.run {}; try? await Task.sleep(nanoseconds: 50_000_000) }
         await MainActor.run {
-            XCTAssertNil(weakState, "a closed archive's BrowserState leaked")
-            XCTAssertNil(weakModel, "AppModel leaked")
+            XCTAssertNil(watch.state, "a closed archive's BrowserState leaked")
+            XCTAssertNil(watch.model, "AppModel leaked")
         }
+    }
+}
+
+// MARK: - Damaged or newer-version files in Application Support
+
+final class SavedStateTests: XCTestCase {
+    var support: URL!
+
+    override func setUpWithError() throws {
+        support = FileManager.default.temporaryDirectory.appendingPathComponent("zipper-state-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: support) }
+
+    @MainActor
+    func launch(_ defaults: UserDefaults? = nil) -> AppModel {
+        AppModel(platform: HeadlessPlatform(), defaults: defaults ?? UserDefaults(suiteName: "ZipperState-\(UUID().uuidString)")!,
+                 supportDirectory: support)
+    }
+
+    func testGarbageInEveryStateFileStillLaunchesAndRecovers() async throws {
+        try Data("not json at all {{{".utf8).write(to: support.appendingPathComponent("History.json"))
+        try Data([0xFF, 0xFE, 0x00, 0x01]).write(to: support.appendingPathComponent("Presets.json"))
+        let suite = "ZipperState-\(UUID().uuidString)"
+        await MainActor.run {
+            let defaults = UserDefaults(suiteName: suite)!
+            defaults.set(Data("{\"defaultFormat\": 12, \"limits\": \"nonsense\", \"openAction\": \"teleport\"}".utf8), forKey: AppSettings.defaultsKey)
+            defaults.set(["/no/such/archive.zip", ""], forKey: RecentItems.key)
+            let model = launch(defaults)
+            XCTAssertEqual(model.settings.defaultFormat, .zip, "unreadable values fall back one by one")
+            XCTAssertEqual(model.settings.openAction, .browse)
+            XCTAssertEqual(model.settings.limits, SafetyLimits.default)
+            XCTAssertTrue(model.userPresets.isEmpty)
+            XCTAssertTrue(model.history.all().isEmpty)
+            XCTAssertTrue(model.recentArchives.isEmpty, "recent items that no longer exist are dropped")
+            // The app is usable: saving works again.
+            model.userPresets.append(Preset(id: "user.x", name: "Mine", summary: "", settings: CompressionSettings(format: .zip)))
+            model.savePresets()
+            model.history.add(HistoryRecord(kind: .compress, inputs: ["a"], output: nil, succeeded: true, summary: "ok", duration: 1))
+            XCTAssertEqual(model.history.all().count, 1)
+        }
+        await MainActor.run { XCTAssertEqual(launch().userPresets.map(\.name), ["Mine"]) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: support.appendingPathComponent("Presets.unreadable.json").path),
+                      "the unreadable presets file is kept aside, not silently overwritten")
+    }
+
+    func testOneUnreadableEntryDoesNotLoseTheOthers() async throws {
+        // As written by a newer version: one preset holds a value this version can't read.
+        let store = PresetStore(fileURL: support.appendingPathComponent("Presets.json"))
+        try store.save([3, 7, 9].map { level in
+            Preset(id: "user.\(level)", name: "Level \(level)", summary: "", settings: CompressionSettings(format: .zip, level: level))
+        })
+        var json = try String(contentsOf: store.fileURL, encoding: .utf8)
+        let before = json
+        json = json.replacingOccurrences(of: #""level"\s*:\s*7"#, with: "\"level\":\"eleven\"", options: .regularExpression)
+        XCTAssertNotEqual(json, before, "the test couldn't find the value to damage")
+        try json.write(to: store.fileURL, atomically: true, encoding: .utf8)
+        XCTAssertEqual(store.load().map(\.name), ["Level 3", "Level 9"], "the readable presets survive")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: support.appendingPathComponent("Presets.unreadable.json").path))
+
+        let history = ActivityHistory(fileURL: support.appendingPathComponent("History.json"))
+        history.add(HistoryRecord(kind: .extract, inputs: ["one.zip"], output: nil, succeeded: true, summary: "first", duration: 1))
+        history.add(HistoryRecord(kind: .compress, inputs: ["two"], output: nil, succeeded: true, summary: "second", duration: 1))
+        var text = try String(contentsOf: history.fileURL, encoding: .utf8)
+        text = text.replacingOccurrences(of: "\"extract\"", with: "\"teleport\"")
+        try text.write(to: history.fileURL, atomically: true, encoding: .utf8)
+        XCTAssertEqual(history.all().map(\.summary), ["second"], "the record this version can read is still listed")
+        history.add(HistoryRecord(kind: .test, inputs: ["three"], output: nil, succeeded: true, summary: "third", duration: 1))
+        XCTAssertEqual(history.all().map(\.summary), ["third", "second"])
+    }
+
+    func testLossyArrayKeepsOrderAndCountsSkips() throws {
+        let decoded = try JSONDecoder().decode(LossyArray<Int>.self, from: Data("[1, \"two\", 3, {\"n\": 4}, null, 6]".utf8))
+        XCTAssertEqual(decoded.elements, [1, 3, 6])
+        XCTAssertEqual(decoded.skipped, 3)
+        XCTAssertThrowsError(try JSONDecoder().decode(LossyArray<Int>.self, from: Data("{\"not\": \"an array\"}".utf8)))
     }
 }

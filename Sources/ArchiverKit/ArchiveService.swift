@@ -216,7 +216,7 @@ public final class ArchiveService: @unchecked Sendable {
             throw ArchiveError.noEngineAvailable(format: format, operation: "create", hint: registry.engine(.sevenZip)?.descriptor.unavailableReason)
         }
         if settings.splitVolumeSize != nil {
-            throw ArchiveError.operationNotSupported(format: format, operation: "split archives", reason: "Use 7z or ZIP (requires the 7-Zip engine), or split the finished file with Tools › Split File.")
+            throw ArchiveError.operationNotSupported(format: format, operation: "split archives", reason: "Use 7z or ZIP (requires the 7-Zip engine), or split the finished file with Tools › Split & Join.")
         }
         if let enc = settings.encryption {
             throw ArchiveError.operationNotSupported(format: format, operation: "\(enc.method.displayName) encryption", reason: registry.engine(.sevenZip)?.descriptor.unavailableReason ?? "Choose ZIP (AES-256), 7z or Apple Encrypted Archive.")

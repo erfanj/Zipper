@@ -425,13 +425,18 @@ enum RecentItems {
             var stale = false
             guard let url = try? URL(resolvingBookmarkData: data, options: [.withoutUI, .withoutMounting], relativeTo: nil,
                                      bookmarkDataIsStale: &stale),
-                  FileManager.default.fileExists(atPath: url.path) else { return nil }
+                  isExistingFile(url.path) else { return nil }
             return url
         }
         #else
-        return (defaults.stringArray(forKey: key) ?? []).map { URL(fileURLWithPath: $0) }
-            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        return (defaults.stringArray(forKey: key) ?? []).filter(isExistingFile).map { URL(fileURLWithPath: $0) }
         #endif
+    }
+
+    /// Recent items are archives: a path that is gone, empty or now a folder is dropped.
+    private static func isExistingFile(_ path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        return !path.isEmpty && FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && !isDirectory.boolValue
     }
 
     static func save(_ urls: [URL], defaults: UserDefaults = .standard) {

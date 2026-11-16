@@ -20,7 +20,7 @@ enum Exit: Int32 {
         switch e {
         case .passwordRequired, .incorrectPassword, .authenticationFailed: return .password
         case .damaged, .checksumMismatch, .truncated, .verificationFailed: return .integrity
-        case .unsupportedFormat, .notAnArchive, .noEngineAvailable, .engineUnavailable, .operationNotSupported, .unsupportedMethod, .unsupportedEncryption, .notEditable: return .unsupported
+        case .unsupportedFormat, .notAnArchive, .noEngineAvailable, .engineUnavailable, .operationNotSupported, .unsupportedMethod, .unsupportedEncryption, .notEditable, .conflictingNames: return .unsupported
         case .missingVolume: return .missingVolume
         case .safetyLimitExceeded, .unsafePath: return .safety
         case .io, .permissionDenied, .insufficientSpace, .fileNotFound, .destinationExists: return .io
@@ -41,7 +41,14 @@ struct Args {
     static let valued: Set<String> = ["o", "output", "dest", "format", "f", "level", "l", "method", "encrypt", "split", "preset", "exclude",
                                       "include", "threads", "mode", "only", "conflict", "encoding", "algo", "manifest", "verify-manifest",
                                       "size", "to", "add", "delete", "rename", "mkdir", "move", "length", "max-size", "name", "intent",
-                                      "dictionary", "word-size", "solid", "export", "import", "comment", "performance", "engine"]
+                                      "dictionary", "word-size", "solid", "export", "comment", "performance"]
+    /// Every option that takes no value. Anything else is a mistake: a mistyped --encrypt or
+    /// --hide-names must stop the command, not quietly make an archive without it.
+    static let known: Set<String> = ["allow-mount", "allow-signed", "analyze", "content", "cross-platform", "csv", "exclude-clutter",
+                                     "exclude-dev", "follow-links", "force", "hide-names", "json", "keep-macosx", "mac-metadata", "nested",
+                                     "no-hidden", "no-links", "no-permissions", "no-root-folder", "no-symbols", "passphrase",
+                                     "password-stdin", "per-folder", "per-item", "q", "quiet", "skip-links", "trash-after", "trusted",
+                                     "verify", "help", "h"]
 
     init(_ argv: [String]) throws {
         var i = 0
@@ -61,6 +68,12 @@ struct Args {
                     options[key, default: []].append(value!)
                 } else {
                     if key == "password" { throw UsageError(message: "Passwords can't be given as arguments. Use --password-stdin or enter it when prompted.") }
+                    guard Args.known.contains(key) else {
+                        let shown = (key.count == 1 ? "-" : "--") + key
+                        let near = Args.closest(to: key).map { " Did you mean \($0.count == 1 ? "-" : "--")\($0)?" } ?? ""
+                        throw UsageError(message: "Unknown option “\(shown)”.\(near)")
+                    }
+                    guard value == nil else { throw UsageError(message: "--\(key) doesn't take a value.") }
                     flags.insert(key)
                 }
             } else {
@@ -68,6 +81,30 @@ struct Args {
             }
             i += 1
         }
+    }
+
+    /// The option a typo most likely meant: within two edits, and unambiguous.
+    static func closest(to key: String) -> String? {
+        func distance(_ a: [Character], _ b: [Character]) -> Int {
+            var row = Array(0...b.count)
+            for (i, ca) in a.enumerated() {
+                var previous = row[0]
+                row[0] = i + 1
+                for (j, cb) in b.enumerated() {
+                    let current = row[j + 1]
+                    row[j + 1] = min(previous + (ca == cb ? 0 : 1), row[j] + 1, current + 1)
+                    previous = current
+                }
+            }
+            return row[b.count]
+        }
+        guard key.count > 2 else { return nil }
+        let ranked = known.union(valued).filter { $0.count > 2 }
+            .map { (name: $0, d: distance(Array(key), Array($0))) }
+            .filter { $0.d <= 2 }
+            .sorted { ($0.d, $0.name) < ($1.d, $1.name) }
+        guard let best = ranked.first, ranked.count == 1 || ranked[1].d > best.d else { return nil }
+        return best.name
     }
 
     func opt(_ names: String...) -> String? { names.lazy.compactMap { options[$0]?.last }.first }
@@ -82,6 +119,11 @@ var jsonOutput = false
 var quiet = false
 
 func printErr(_ s: String) { FileHandle.standardError.write(Data((s + "\n").utf8)) }
+
+/// "1 file", "2 files": a count with its noun.
+func counted(_ n: Int, _ singular: String, _ plural: String? = nil) -> String {
+    "\(n) \(n == 1 ? singular : (plural ?? singular + "s"))"
+}
 
 func emitJSON<T: Encodable>(_ value: T) {
     let enc = JSONEncoder()
@@ -364,7 +406,7 @@ func cmdCompress(_ args: Args) throws -> Exit {
             a.warnings.forEach { print("  Warning: \($0)") }
         }
         if !outcome.excluded.isEmpty {
-            print("\(outcome.excluded.count) item(s) excluded:")
+            print("\(counted(outcome.excluded.count, "item")) excluded:")
             outcome.excluded.prefix(20).forEach { print("  \($0.path) — \($0.reason)") }
             if outcome.excluded.count > 20 { print("  …") }
         }
@@ -432,14 +474,14 @@ func cmdExtract(_ args: Args) throws -> Exit {
             results.append(ExtractJSON(archive: a.path, created: o.createdItems.map(\.path), engine: o.engine.rawValue, report: o.report,
                                        verification: o.verification, warnings: o.warnings, notes: o.engineNotes))
             if !jsonOutput, !quiet {
-                print("Extracted \(a.lastPathComponent) → \(o.createdItems.map(\.lastPathComponent).joined(separator: ", ")) (\(o.report.filesWritten) files, \(ByteFormatting.string(o.report.bytesWritten)))")
+                print("Extracted \(a.lastPathComponent) → \(o.createdItems.map(\.lastPathComponent).joined(separator: ", ")) (\(counted(o.report.filesWritten, "file")), \(ByteFormatting.string(o.report.bytesWritten)))")
                 for b in o.report.blocked { print("  Blocked: \(b.path) — \(b.reason)") }
                 for s in o.report.skipped.prefix(20) { print("  Skipped: \(s.path) — \(s.reason)") }
                 for r in o.report.renamed.prefix(20) { print("  Renamed: \(r.archivePath) → \(r.writtenAs)") }
                 if !o.report.potentiallyExecutable.isEmpty {
-                    print("  Note: \(o.report.potentiallyExecutable.count) extracted item(s) can run code (apps, scripts or programs). They were not opened.")
+                    print("  Note: \(counted(o.report.potentiallyExecutable.count, "extracted item")) can run code (apps, scripts or programs). Nothing was opened.")
                 }
-                if let v = o.verification { print("  Verification: \(v.passed ? "passed" : "FAILED") (\(v.filesChecked) files)"); v.mismatches.forEach { print("    \($0)") } }
+                if let v = o.verification { print("  Verification: \(v.passed ? "passed" : "FAILED") (\(counted(v.filesChecked, "file")))"); v.mismatches.forEach { print("    \($0)") } }
                 (o.warnings + o.engineNotes).forEach { print("  \($0)") }
             }
             if !o.report.blocked.isEmpty, worst == .ok { worst = .safety }
@@ -483,7 +525,7 @@ func cmdList(_ args: Args) throws -> Exit {
         print("\(date)  \(size.padding(toLength: 12, withPad: " ", startingAt: 0)) \(flag) \(e.path)\(link)")
     }
     print("")
-    print("\(l.fileCount) files, \(l.directoryCount) folders, \(l.totalUncompressedSize.map(ByteFormatting.string) ?? "unknown size")")
+    print("\(counted(l.fileCount, "file")), \(counted(l.directoryCount, "folder")), \(l.totalUncompressedSize.map(ByteFormatting.string) ?? "unknown size")")
     print("Format: \(FormatCatalog.descriptor(for: opened.detection.format)?.name ?? opened.detection.format.rawValue)\(l.properties.formatDescription.map { " (\($0))" } ?? "") — engine: \(opened.engine)")
     if l.properties.hasEncryptedEntries == true { print("Encrypted: yes\(l.properties.hasEncryptedHeaders == true ? " (file names hidden)" : "")") }
     if let mp = opened.detection.multipart { print("Volumes: \(mp.volumes.count)") }
@@ -571,7 +613,7 @@ func cmdConvert(_ args: Args) throws -> Exit {
         emitJSON(["output": o.created.outputs.first?.path ?? "", "identical": String(o.comparison.identical.count),
                   "warnings": o.warnings.map(\.message).joined(separator: " | ")])
     } else {
-        print("Converted to \(o.created.outputs.map(\.lastPathComponent).joined(separator: ", ")) — \(o.comparison.identical.count) files verified identical by SHA-256.")
+        print("Converted to \(o.created.outputs.map(\.lastPathComponent).joined(separator: ", ")) — \(counted(o.comparison.identical.count, "file")) verified identical by SHA-256.")
     }
     return .ok
 }
@@ -714,7 +756,7 @@ func cmdEdit(_ args: Args) throws -> Exit {
     guard !edits.isEmpty else { throw UsageError(message: "No edits given.") }
     let ro = readOptions(args)
     let o = try service.modify(ModifyRequest(archive: url(f), edits: edits, readOptions: ro, password: nil, allowSignedPackages: args.has("allow-signed")))
-    print("Updated \(o.archive.lastPathComponent): \(o.entryCount) entries, verification \(o.verification.result.rawValue). (\(o.strategy))")
+    print("Updated \(o.archive.lastPathComponent): \(counted(o.entryCount, "entry", "entries")), verification \(o.verification.result.rawValue). (\(o.strategy))")
     o.warnings.forEach { print("Warning: \($0)") }
     return .ok
 }
@@ -732,7 +774,7 @@ func cmdAdvise(_ args: Args) throws -> Exit {
         if let b = o.estimatedBytes { s += " Estimated size ≈ \(ByteFormatting.string(b))." }
         return s
     }
-    print("Selection: \(c.fileCount) files, \(ByteFormatting.string(c.totalBytes))")
+    print("Selection: \(counted(c.fileCount, "file")), \(ByteFormatting.string(c.totalBytes))")
     print("Recommended — \(line(rec.primary))")
     rec.alternatives.forEach { print("  Alternative — \(line($0))") }
     print(rec.basis)
@@ -746,11 +788,11 @@ func cmdAnalyze(_ args: Args) throws -> Exit {
     print("Largest files:")
     a.largestFiles.prefix(10).forEach { print("  \(ByteFormatting.string($0.uncompressedSize ?? 0).padding(toLength: 10, withPad: " ", startingAt: 0)) \($0.path)") }
     print("By type:")
-    a.bytesByKind.forEach { print("  \($0.kind.rawValue.padding(toLength: 12, withPad: " ", startingAt: 0)) \(ByteFormatting.string($0.bytes)) in \($0.count) files") }
+    a.bytesByKind.forEach { print("  \($0.kind.rawValue.padding(toLength: 12, withPad: " ", startingAt: 0)) \(ByteFormatting.string($0.bytes)) in \(counted($0.count, "file"))") }
     print("By top-level folder:")
     a.directorySizes.prefix(10).forEach { print("  \(ByteFormatting.string($0.bytes).padding(toLength: 10, withPad: " ", startingAt: 0)) \($0.path)") }
     if let r = a.overallRatio { print(String(format: "Compressed to %.1f%% of original size.", r * 100)) }
-    if !a.poorlyCompressed.isEmpty { print("\(a.poorlyCompressed.count) files compressed poorly (already-compressed data).") }
+    if !a.poorlyCompressed.isEmpty { print("\(counted(a.poorlyCompressed.count, "file")) compressed poorly (already-compressed data).") }
     return .ok
 }
 
@@ -865,6 +907,10 @@ if command == "--version" || command == "version" {
 let code: Exit
 do {
     let args = try Args(Array(argv.dropFirst()))
+    if args.has("help") || args.has("h") {
+        print(usage)
+        exit(Exit.ok.rawValue)
+    }
     jsonOutput = args.has("json")
     quiet = args.has("quiet") || args.has("q")
     switch command {

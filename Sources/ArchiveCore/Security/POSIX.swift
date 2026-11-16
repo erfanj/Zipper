@@ -34,6 +34,14 @@ enum POSIX {
                         mtime: Date(timeIntervalSince1970: Double(ts.tv_sec) + Double(ts.tv_nsec) / 1e9))
     }
 
+    /// The target of the symbolic link at `name` (relative to `dirfd`), or nil if it isn't one.
+    static func readLink(at dirfd: Int32, _ name: String) -> String? {
+        var buffer = [CChar](repeating: 0, count: 4096)
+        let n = readlinkat(dirfd, name, &buffer, 4095)
+        guard n > 0 else { return nil }
+        return String(decoding: buffer.prefix(n).map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }
+
     static func openDirectory(at dirfd: Int32, _ name: String) -> Int32 {
         openat(dirfd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
     }
@@ -58,18 +66,14 @@ enum POSIX {
         #endif
     }
 
-    #if canImport(Darwin)
-    static let utimeOmit = -2
-    #else
-    static let utimeOmit = (1 << 30) - 2
-    #endif
-
-    /// Sets access and modification times on an open descriptor. A nil date leaves it unchanged.
+    /// Sets access and modification times on an open descriptor. A missing date becomes "now", which
+    /// is what a file that has just been written has anyway. UTIME_OMIT would say the same, but
+    /// drivers built on older FUSE libraries (some NTFS and exFAT drivers among them) silently ignore
+    /// a request that sets only one of the two times, and the extracted file would lose its date.
     static func setTimes(fd: Int32, modification: Date?, access: Date?) {
         guard modification != nil || access != nil else { return }
-        var omit = timespec(from: Date())
-        omit.tv_nsec = utimeOmit
-        var times = [access.map { timespec(from: $0) } ?? omit, modification.map { timespec(from: $0) } ?? omit]
+        let now = timespec(from: Date())
+        var times = [access.map { timespec(from: $0) } ?? now, modification.map { timespec(from: $0) } ?? now]
         _ = futimens(fd, &times)
     }
 

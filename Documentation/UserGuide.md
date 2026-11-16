@@ -54,7 +54,8 @@ be left out and lets you review them.
   archive in a temporary file and checks it. Only then does it replace the original, so a failure
   never damages your archive. Encrypted archives stay encrypted.
 * **Edit in Default App** (Control-click a file) opens it in its app. When you save, Zipper asks
-  whether to update the archive.
+  whether to update the archive. Scripts open as text, never run; files that macOS would run or
+  install when opened (`.command`, `.webloc`, apps, installers) are refused with an explanation.
 * **Info** (⌘I) shows the format, compression, encryption, sizes, savings and the selected item's
   details. **More › Show Analysis** shows where the space goes.
 * Signed packages (APK, IPA, JAR, PKG…) aren't edited unless you accept that their signature will no
@@ -121,4 +122,5 @@ zipper formats
 To install it: Settings › Advanced › Command line shows a one-line command that links
 `Zipper.app/Contents/Helpers/zipper` into `/usr/local/bin`. Run `zipper help` for everything.
 Passwords are typed at a hidden prompt or piped with `--password-stdin`, never given as arguments.
-Ctrl-C cancels cleanly; press it twice to quit immediately.
+Ctrl-C cancels cleanly; press it twice to quit immediately. A misspelled option stops the command
+(`--encypt` → "Did you mean --encrypt?") instead of being ignored.

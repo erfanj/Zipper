@@ -52,7 +52,29 @@ struct BrowserRow: Identifiable, Hashable, Sendable {
     }
 
     /// Finder's description of a file type ("PDF document", "JPEG image") where available.
+    /// Remembered per extension: asking the system costs about 50 µs, and a large archive has
+    /// hundreds of thousands of entries and a handful of extensions.
     static func kindName(forExtension ext: String) -> String {
+        let cache = kindNames
+        cache.lock.lock()
+        let known = cache.names[ext]
+        cache.lock.unlock()
+        if let known { return known }
+        let name = describeKind(forExtension: ext)
+        cache.lock.lock()
+        if cache.names.count >= 4096 { cache.names.removeAll(keepingCapacity: true) }   // an archive of made-up extensions
+        cache.names[ext] = name
+        cache.lock.unlock()
+        return name
+    }
+
+    private final class KindNames: @unchecked Sendable {
+        let lock = NSLock()
+        var names: [String: String] = [:]
+    }
+    private static let kindNames = KindNames()
+
+    private static func describeKind(forExtension ext: String) -> String {
         #if canImport(UniformTypeIdentifiers)
         if !ext.isEmpty, let t = UTType(filenameExtension: ext), let d = t.localizedDescription { return d }
         #endif

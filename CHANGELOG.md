@@ -142,3 +142,21 @@
 * The macOS test run uses the bundled 7-Zip as engine and reference (`UA_HELPERS_DIR`). Tests now
   ignore p7zip builds older than 21.00 (macOS runners ship 17.05, which rejects valid non-ASCII AES
   passwords). The deep-path stress test is sized to macOS's 1,024-byte path limit.
+
+### First run on a Mac
+
+Found by building and testing on macOS 26 with Xcode 27 (`Scripts/mac-check.sh --dmg`); details in
+[TestReport.md](Documentation/TestReport.md).
+
+* **File descriptors:** on macOS every helper program run (7-Zip and the others) left two file
+  descriptors open, and every look at a helper's memory one. An app left open through days of work
+  would have run out and failed to open anything. They're closed as soon as the helper finishes.
+* **Large archives:** listing an archive with 200,000 entries took 11 seconds, because the browser
+  asked the system for each file's kind once per entry. It asks once per extension now.
+* **UI tests** couldn't start under an ad-hoc signature (the test bundle is now built without the
+  hardened runtime), and **`Scripts/release.sh`** rejected a correct universal app with Xcode 27's
+  `lipo`.
+* **`Scripts/mac-check.sh`** uses the Xcode in /Applications by itself, stops with what to do when
+  Xcode can't run, no longer lets the UI and smoke tests find 7-Zip outside the app bundle, and
+  reports the total test count.
+* One compiler warning in the notification code; one test that compared `/var` with `/private/var`.

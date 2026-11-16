@@ -71,7 +71,9 @@ public final class ExternalToolsEngine: ArchiveEngine, @unchecked Sendable {
         let exe = try tool(for: source.format)
         var entries: [ArchiveEntry] = []
         if source.format == .zpaq {
-            let r = try HelperProcess(exe, ["l", source.url.path]).run()
+            let lister = HelperProcess(exe, ["l", source.url.path])
+            lister.progress = progress
+            let r = try lister.run()
             guard r.status == 0 else { throw ArchiveError.damaged(details: r.combined.trimmingCharacters(in: .whitespacesAndNewlines)) }
             let df = DateFormatter()
             df.locale = Locale(identifier: "en_US_POSIX")
@@ -88,7 +90,9 @@ public final class ExternalToolsEngine: ArchiveEngine, @unchecked Sendable {
                                             permissions: UInt16(parts[3], radix: 8)))
             }
         } else if source.format == .arc {
-            let r = try HelperProcess(exe, ["-l", "-U", source.url.path]).run()
+            let lister = HelperProcess(exe, ["-l", "-U", source.url.path])
+            lister.progress = progress
+            let r = try lister.run()
             guard r.status == 0 else { throw ArchiveError.damaged(details: r.combined.trimmingCharacters(in: .whitespacesAndNewlines)) }
             for line in r.stdout.components(separatedBy: "\n") {
                 let parts = line.split(separator: "\t").map { $0.trimmingCharacters(in: .whitespaces) }
@@ -138,7 +142,9 @@ public final class ExternalToolsEngine: ArchiveEngine, @unchecked Sendable {
         case .arc: args = ["-t", source.url.path]
         default: args = ["-t", source.url.path]
         }
-        let r = try HelperProcess(exe, args).run()
+        let tester = HelperProcess(exe, args)
+        tester.progress = progress
+        let r = try tester.run()
         var report = IntegrityReport(archive: source.url.lastPathComponent, format: source.format, engine: id)
         report.filesInspected = listing.fileCount
         report.checks = ["Full decode by \(exe.lastPathComponent)"]

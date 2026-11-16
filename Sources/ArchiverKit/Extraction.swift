@@ -254,6 +254,15 @@ extension ArchiveService {
             report.renamed += m.renamed
             report.replaced = m.replaced
             report.writtenFiles = m.writtenFiles
+            report.warnings += m.warnings
+            // What reached the destination, not what was staged: with "Skip" or after a blocked item
+            // these differ, and the summary used to count files that were never written.
+            report.filesWritten = m.filesWritten
+            report.bytesWritten = m.bytesWritten
+            report.directoriesCreated = m.directoriesCreated
+            report.symlinksCreated = m.symlinksCreated
+            report.hardlinksCreated = m.hardlinksCreated
+            report.potentiallyExecutable = m.potentiallyExecutable
             created = m.topLevelItems.map { parent.appendingPathComponent($0) }
         }
         if request.mode == .newFolder || (request.mode == .smart && top.count != 1) {

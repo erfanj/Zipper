@@ -54,7 +54,7 @@ public enum FileSplitter {
                 let name = file.lastPathComponent + "." + String(format: "%0\(digits)d", i)
                 let url = outDir.appendingPathComponent(name)
                 guard !FileManager.default.fileExists(atPath: url.path) else { throw ArchiveError.destinationExists(path: url.path) }
-                FileManager.default.createFile(atPath: url.path, contents: nil)
+                _ = FileManager.default.createFile(atPath: url.path, contents: nil)
                 guard let out = FileHandle(forWritingAtPath: url.path) else { throw ArchiveError.permissionDenied(path: url.path) }
                 parts.append(url)
                 let ph = StreamingHasher(.sha256)
@@ -105,7 +105,7 @@ public enum FileSplitter {
         let out = output ?? ArchiveService.uniqueURL(in: set.directory, name: set.baseName)
         Leftovers.sweep(out.deletingLastPathComponent())
         let temp = out.deletingLastPathComponent().appendingPathComponent(".\(out.lastPathComponent).ua-\(TempToken.make()).partial")
-        FileManager.default.createFile(atPath: temp.path, contents: nil)
+        _ = FileManager.default.createFile(atPath: temp.path, contents: nil)
         guard let fh = FileHandle(forWritingAtPath: temp.path) else { throw ArchiveError.permissionDenied(path: temp.path) }
         let hasher = StreamingHasher(.sha256)
         let total = set.volumes.reduce(UInt64(0)) { $0 + ((try? FileManager.default.attributesOfItem(atPath: $1.path)[.size] as? UInt64) ?? 0) }

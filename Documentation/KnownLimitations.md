@@ -57,6 +57,12 @@ Honest list of what is not done, not verified, or not possible.
   quit. Cancelling (or Ctrl-C in the CLI) removes partial output at once. After a crash or force
   quit, the hidden partial files are removed by the next operation that writes to that folder (each
   carries the ID of the process that made it; those of running processes are left alone).
+* **Helper programs are bounded when they read.** A helper (7-Zip, The Unarchiver's tools, zpaq…)
+  that comes to hold more than half the Mac's memory while listing, testing or extracting is
+  stopped, and Zipper says so. An archive that really needs that much (a 7z with a dictionary
+  larger than half the memory) can't be read on that Mac. The Unarchiver's tools get 2 GB and a
+  time allowance, because damaged files can make them loop; the other helpers have no time
+  allowance, so one that gets stuck is stopped with Cancel.
 * **A killed Zipper leaves its helper running.** If the app or CLI is force-quit or crashes during
   an operation that uses 7-Zip (or another helper), the helper process finishes its job in the
   background before exiting; its output is discarded as above.
@@ -64,6 +70,12 @@ Honest list of what is not done, not verified, or not possible.
   on the same archive wait for each other, so each applies on top of the previous one. If another app
   replaces the archive while Zipper is rebuilding it, Zipper keeps the other version and reports
   that the change wasn't applied.
+* **Names a Mac can't tell apart.** A Mac's disk treats `Readme.txt` and `README.TXT` (and the
+  two Unicode spellings of an accented name) as one file; an archive made on Linux can hold both.
+  Extracting keeps every file: one keeps its name and the others get a number (`README 2.TXT`),
+  and the summary lists them. Editing or converting such an archive on that disk is refused with a
+  message naming the two items, because rebuilding it would have to drop or rename one. The same
+  goes for an archive that holds the same name twice. Extract it instead.
 * **Backslashes in names** are treated as folder separators when extracting, in every format
   (archives made on Windows use them that way): `a\b.txt` extracts as `a/b.txt`. 7z archives
   can't be created from files whose names contain a line break; Zipper says so instead of leaving
@@ -72,6 +84,9 @@ Honest list of what is not done, not verified, or not possible.
   ACLs are stored only in Mac Preservation mode and restored only by formats/engines that support
   them; sparse files are materialised (written out in full) on extraction; hard links are preserved
   for TAR/CPIO but stored as copies in ZIP and 7z.
+* **Edit in Default App** doesn't open files that macOS would run or install instead of opening
+  (`.command`, `.terminal`, `.webloc`, apps, installer packages…). Extract those and open them from
+  an editor.
 * **Selective extraction from solid archives** decodes the data stored before the selected file.
 * **Content search** inside archives covers text and source files only, with per-file and total size
   budgets.

@@ -153,6 +153,10 @@ targets:
         TEST_TARGET_NAME: Zipper
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_IDENTITY: "-"
+        # The test runner loads this bundle into itself. With the hardened runtime and an ad-hoc
+        # signature (no Team ID) macOS refuses that: "mapping process and mapped file have
+        # different Team IDs". Tests are never shipped, so they don't need the hardened runtime.
+        ENABLE_HARDENED_RUNTIME: NO
     dependencies:
       - target: Zipper
 schemes:

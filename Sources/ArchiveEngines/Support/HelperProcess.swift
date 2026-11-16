@@ -68,6 +68,49 @@ final class HelperProcess {
     /// Used for tools such as `hdiutil -stdinpass`.
     var initialInput: Secret?
     var progress: OperationProgress?
+    /// The most memory the helper may hold, or nil for no limit. A damaged archive can make a
+    /// helper's parser ask for many gigabytes (lsar did, on a fuzzed file); the helper is stopped
+    /// rather than the computer. Helpers that *create* archives set this to nil: what they need
+    /// follows from settings the user chose.
+    var memoryLimit: UInt64? = HelperProcess.defaultMemoryLimit
+    /// The longest the helper may run, not counting time spent paused; nil (the default) for no
+    /// limit. For tools whose parsers can loop forever on damaged input.
+    var timeLimit: TimeInterval?
+
+    /// Half the computer's memory, and never less than 2 GB: more than any archive needs to be read
+    /// (the largest 7z and RAR 5 dictionaries are 1.5 GB and 1 GB), less than what hurts.
+    static var defaultMemoryLimit: UInt64 { max(2 << 30, ProcessInfo.processInfo.physicalMemory / 2) }
+
+    /// Memory the process `pid` holds right now, or nil if that can't be read.
+    static func residentMemory(of pid: Int32) -> UInt64? {
+        #if os(Linux)
+        if let statm = try? String(contentsOfFile: "/proc/\(pid)/statm", encoding: .utf8) {
+            let fields = statm.split(separator: " ")
+            if fields.count > 1, let pages = UInt64(fields[1]) { return pages * UInt64(max(1, sysconf(Int32(_SC_PAGESIZE)))) }
+        }
+        #endif
+        return residentMemoryFromPS(pid)
+    }
+
+    /// The same, asked of `ps` (the way that works on macOS without private interfaces).
+    static func residentMemoryFromPS(_ pid: Int32) -> UInt64? {
+        let ps = Process()
+        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
+        ps.arguments = ["-o", "rss=", "-p", String(pid)]
+        let out = Pipe()
+        ps.standardOutput = out
+        ps.standardError = FileHandle.nullDevice
+        ps.standardInput = FileHandle.nullDevice
+        guard (try? ps.run()) != nil else { return nil }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        // This runs once a second for as long as a helper does: the descriptor is closed now, not
+        // whenever the handle happens to be deallocated.
+        try? out.fileHandleForReading.close()
+        ps.waitUntilExit()
+        let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard ps.terminationStatus == 0, let kilobytes = UInt64(text) else { return nil }
+        return kilobytes * 1024
+    }
 
     init(_ executable: URL, _ arguments: [String]) {
         self.executable = executable
@@ -103,21 +146,33 @@ final class HelperProcess {
         p.standardError = errPipe
         p.standardInput = inPipe
 
-        let lock = NSLock()
-        var outData = Data(), errData = Data()
-        var promptWindow = ""
-        var prompts = 0
-        var abortedForPassword = false
+        // Everything the pipe handlers, the cancel handler and this thread share, behind one lock.
+        final class Shared: @unchecked Sendable {
+            let lock = NSLock()
+            var out = Data(), err = Data()
+            var promptWindow = ""
+            var prompts = 0
+            var abortedForPassword = false
+            var cancelled = false
+            var finished = false
+            var overMemory: UInt64?
+            var active: TimeInterval = 0
+            var overTime: TimeInterval?
+        }
+        let shared = Shared()
         let stdinHandle = inPipe.fileHandleForWriting
+        let markers = promptMarkers
+        let passwordPrompt = onPasswordPrompt
 
-        func handlePrompts(_ chunk: String) {
-            promptWindow += chunk
-            if promptWindow.count > 4096 { promptWindow = String(promptWindow.suffix(256)) }
-            for marker in promptMarkers where promptWindow.contains(marker) {
-                promptWindow = ""
-                prompts += 1
-                if prompts > 4 { abortedForPassword = true; p.terminate(); return }
-                if let secret = onPasswordPrompt?() {
+        /// Called with `shared.lock` held.
+        @Sendable func handlePrompts(_ chunk: String) {
+            shared.promptWindow += chunk
+            if shared.promptWindow.count > 4096 { shared.promptWindow = String(shared.promptWindow.suffix(256)) }
+            for marker in markers where shared.promptWindow.contains(marker) {
+                shared.promptWindow = ""
+                shared.prompts += 1
+                if shared.prompts > 4 { shared.abortedForPassword = true; p.terminate(); return }
+                if let secret = passwordPrompt?() {
                     secret.withBytes { bytes in
                         var line = bytes
                         line.append(0x0A)
@@ -126,7 +181,7 @@ final class HelperProcess {
                         for i in line.indices { line[i] = 0 }
                     }
                 } else {
-                    abortedForPassword = true
+                    shared.abortedForPassword = true
                     try? stdinHandle.close()
                     p.terminate()
                 }
@@ -134,30 +189,32 @@ final class HelperProcess {
             }
         }
 
+        let stdoutChunk = onStdoutChunk
         outPipe.fileHandleForReading.readabilityHandler = { h in
             let d = h.availableData
             guard !d.isEmpty else { return }
-            lock.lock()
-            outData.append(d)
             let s = String(decoding: d, as: UTF8.self)
+            shared.lock.lock()
+            shared.out.append(d)
             handlePrompts(s)
-            lock.unlock()
-            self.onStdoutChunk?(s)
+            shared.lock.unlock()
+            stdoutChunk?(s)
         }
         errPipe.fileHandleForReading.readabilityHandler = { h in
             let d = h.availableData
             guard !d.isEmpty else { return }
-            lock.lock()
-            errData.append(d)
+            shared.lock.lock()
+            shared.err.append(d)
             handlePrompts(String(decoding: d, as: UTF8.self))
-            lock.unlock()
+            shared.lock.unlock()
         }
 
-        var cancelled = false
         var tokens: [OperationProgress.HandlerToken] = []
         if let progress {
             tokens.append(progress.onCancel { [weak p] in
-                cancelled = true
+                shared.lock.lock()
+                shared.cancelled = true
+                shared.lock.unlock()
                 p?.terminate()
             })
             tokens.append(progress.onPauseChange { [weak p] paused in
@@ -180,21 +237,70 @@ final class HelperProcess {
             }
             try? stdinHandle.close()
         }
+        // Memory and time guard. SIGKILL, because a helper that is paused (SIGSTOP), busy
+        // allocating or stuck in a loop doesn't act on a polite request.
+        var limitGuard: DispatchSourceTimer?
+        let (memoryLimit, timeLimit, watched) = (self.memoryLimit, self.timeLimit, self.progress)
+        if memoryLimit != nil || timeLimit != nil {
+            let pid = p.processIdentifier
+            #if os(Linux)
+            let interval: TimeInterval = 0.25
+            #else
+            let interval: TimeInterval = 1.0   // each look at the memory starts `ps` here
+            #endif
+            let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+            timer.schedule(deadline: .now() + interval, repeating: interval)
+            timer.setEventHandler {
+                var tooMuch: UInt64?
+                if let limit = memoryLimit, let used = Self.residentMemory(of: pid), used > limit { tooMuch = used }
+                let paused = watched?.isPaused ?? false
+                shared.lock.lock()
+                if !paused { shared.active += interval }
+                if !shared.finished, shared.overMemory == nil, shared.overTime == nil {
+                    if let used = tooMuch {
+                        shared.overMemory = used
+                        kill(pid, SIGKILL)
+                    } else if let limit = timeLimit, shared.active > limit {
+                        shared.overTime = shared.active
+                        kill(pid, SIGKILL)
+                    }
+                }
+                shared.lock.unlock()
+            }
+            timer.resume()
+            limitGuard = timer
+        }
         p.waitUntilExit()
+        shared.lock.lock()
+        shared.finished = true
+        shared.lock.unlock()
+        limitGuard?.cancel()
         outPipe.fileHandleForReading.readabilityHandler = nil
         errPipe.fileHandleForReading.readabilityHandler = nil
         // Drain anything left.
         let restOut = outPipe.fileHandleForReading.readDataToEndOfFile()
         let restErr = errPipe.fileHandleForReading.readDataToEndOfFile()
         try? stdinHandle.close()
-        lock.lock()
-        outData.append(restOut)
-        errData.append(restErr)
-        lock.unlock()
+        // Closed here, not left to deallocation: on macOS a handle that has had a readability
+        // handler keeps its descriptor open after the last reference is gone, two per helper run.
+        try? outPipe.fileHandleForReading.close()
+        try? errPipe.fileHandleForReading.close()
+        shared.lock.lock()
+        shared.out.append(restOut)
+        shared.err.append(restErr)
+        let (out, err, cancelled, aborted) = (shared.out, shared.err, shared.cancelled, shared.abortedForPassword)
+        let (overMemory, overTime) = (shared.overMemory, shared.overTime)
+        shared.lock.unlock()
         if cancelled || progress?.isCancelled == true { throw ArchiveError.cancelled }
-        var result = Result(status: p.terminationStatus, stdout: String(decoding: outData, as: UTF8.self),
-                            stderr: String(decoding: errData, as: UTF8.self), wasCancelled: false)
-        if abortedForPassword { result.status = -100 }
+        if let used = overMemory, let limit = memoryLimit {
+            throw ArchiveError.safetyLimitExceeded(.helperMemory, limit: limit, observed: used)
+        }
+        if let ran = overTime, let limit = timeLimit {
+            throw ArchiveError.safetyLimitExceeded(.helperTime, limit: UInt64(limit.rounded()), observed: UInt64(ran.rounded()))
+        }
+        var result = Result(status: p.terminationStatus, stdout: String(decoding: out, as: UTF8.self),
+                            stderr: String(decoding: err, as: UTF8.self), wasCancelled: false)
+        if aborted { result.status = -100 }
         return result
     }
 }

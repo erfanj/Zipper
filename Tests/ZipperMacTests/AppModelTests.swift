@@ -220,3 +220,78 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(AppSettings.load(from: defaults), AppSettings())
     }
 }
+
+/// Every failure a user can see: it must say something, and only point at things that exist.
+final class ErrorMessageTests: XCTestCase {
+    static let everyError: [ArchiveError] = [
+        .fileNotFound(path: "/tmp/a.zip"), .notAnArchive(path: "/tmp/a.txt"), .unsupportedFormat("ACE 2"),
+        .noEngineAvailable(format: .rar, operation: "create", hint: nil),
+        .noEngineAvailable(format: .rar, operation: "create", hint: "Install RAR."),
+        .engineUnavailable(EngineID(rawValue: "7zip"), reason: "not installed"),
+        .operationNotSupported(format: .gzip, operation: "folders", reason: "A gzip stream holds a single file."),
+        .passwordRequired(archive: "/tmp/a.7z"), .incorrectPassword(archive: "/tmp/a.7z"),
+        .unsupportedEncryption(method: "PKWARE strong"), .authenticationFailed(entry: "a.txt"), .authenticationFailed(entry: nil),
+        .unsupportedMethod(method: "WavPack", entry: "a.wav"), .unsupportedMethod(method: "WavPack", entry: nil),
+        .damaged(details: "bad header"), .checksumMismatch(entry: "a.txt"), .missingVolume(expected: ["a.zip.002"]),
+        .truncated(details: "ends early"),
+        .safetyLimitExceeded(.totalSize, limit: 10, observed: 20), .safetyLimitExceeded(.entryCount, limit: 10, observed: 20),
+        .safetyLimitExceeded(.expansionRatio, limit: 10, observed: 20), .safetyLimitExceeded(.duration, limit: 10, observed: 20),
+        .safetyLimitExceeded(.helperMemory, limit: 8 << 30, observed: 9 << 30), .safetyLimitExceeded(.helperTime, limit: 150, observed: 151),
+        .unsafePath(path: "../x", reason: "contains “..”"), .destinationExists(path: "/tmp/a.zip"),
+        .insufficientSpace(needed: 2_000_000, available: 1_000), .permissionDenied(path: "/tmp/locked"),
+        .io(path: "/tmp/a.zip", code: 5, message: "Input/output error"), .externalTool(tool: "7-Zip", exitCode: 2, message: "fatal"),
+        .cancelled, .invalidArgument("Enter a part size."), .verificationFailed(details: "1 file differs"),
+        .notEditable(format: .zip, reason: "Multi-volume archives can't be edited in place."),
+        .changedDuringEdit(path: "/tmp/a.zip"), .conflictingNames(first: "A.txt", second: "a.txt"),
+        .conflictingNames(first: "a.txt", second: "a.txt"), .internalError("unexpected"),
+    ]
+
+    func testEveryErrorHasATitleAnExplanationAndACode() {
+        var codes: [String: String] = [:]
+        for e in Self.everyError {
+            XCTAssertFalse(e.title.isEmpty, "\(e)")
+            XCTAssertGreaterThan(e.explanation.count, 15, "\(e): “\(e.explanation)” doesn't explain anything")
+            XCTAssertFalse(e.code.isEmpty)
+            for text in [e.title, e.explanation] + e.suggestions {
+                for leak in ["Optional(", "nil", "(null)", "FormatID(", "EngineID(", "\\("] {
+                    XCTAssertFalse(text.contains(leak), "\(e.code): “\(text)” shows “\(leak)” to the user")
+                }
+                XCTAssertFalse(text.hasSuffix(" "), "\(e.code): trailing space")
+            }
+            XCTAssertTrue(e.explanation.hasSuffix(".") || e.explanation.hasSuffix(")") || e.explanation.hasSuffix("?"),
+                          "\(e.code): “\(e.explanation)” isn't a finished sentence")
+            if let earlier = codes[e.code] { XCTAssertEqual(earlier, e.title, "two different errors share the code \(e.code)") }
+            codes[e.code] = e.title
+        }
+        XCTAssertGreaterThanOrEqual(Set(codes.keys).count, 28)
+    }
+
+    /// "Tools › Repair", "Settings › Advanced"…: each place a message sends the user to must exist.
+    func testMessagesOnlyPointAtThingsThatExist() {
+        let tools = Set(Tool.allCases.map(\.title))
+        let settingsTabs: Set<String> = ["General", "Compression", "Extraction", "Privacy", "Advanced"]
+        let settingsItems: Set<String> = ["Show Supported Formats"]
+        let pattern = try! NSRegularExpression(pattern: "(System Settings|Settings|Tools) › ([A-Z][A-Za-z&]*(?: (?:&|[A-Z][A-Za-z]*))*)(?: › ([A-Z][A-Za-z]*(?: [A-Z][A-Za-z]*)*))?")
+        var checked = 0
+        for e in Self.everyError {
+            for text in [e.explanation] + e.suggestions {
+                let ns = text as NSString
+                for m in pattern.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                    let place = ns.substring(with: m.range(at: 1)), name = ns.substring(with: m.range(at: 2))
+                    switch place {
+                    case "Tools": XCTAssertTrue(tools.contains(name), "\(e.code): there is no tool called “\(name)” (in “\(text)”)")
+                    case "Settings":
+                        XCTAssertTrue(settingsTabs.contains(name), "\(e.code): there is no Settings tab called “\(name)” (in “\(text)”)")
+                        if m.range(at: 3).location != NSNotFound {
+                            let item = ns.substring(with: m.range(at: 3))
+                            XCTAssertTrue(settingsItems.contains(item), "\(e.code): Settings › \(name) has no “\(item)” (in “\(text)”)")
+                        }
+                    default: break   // macOS's own System Settings
+                    }
+                    checked += 1
+                }
+            }
+        }
+        XCTAssertGreaterThanOrEqual(checked, 5, "the pattern no longer finds the references")
+    }
+}

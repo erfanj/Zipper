@@ -63,7 +63,7 @@ public final class RarEngine: ArchiveEngine, @unchecked Sendable {
         let temp = outDir.appendingPathComponent(".\(request.output.deletingPathExtension().lastPathComponent).ua-\(TempToken.make()).rar")
         let list = FileManager.default.temporaryDirectory.appendingPathComponent("ua-rar-\(UUID().uuidString).lst")
         defer { try? FileManager.default.removeItem(at: list) }
-        let dirsWithChildren = Set(items.map { ($0.archivePath as NSString).deletingLastPathComponent })
+        let dirsWithChildren = Set(items.map { ArchivePath.parent(of: $0.archivePath) })
         let rels = items.compactMap { item -> String? in
             if item.type == .directory, dirsWithChildren.contains(item.archivePath) { return nil }
             let p = item.url.standardizedFileURL.path
@@ -75,6 +75,7 @@ public final class RarEngine: ArchiveEngine, @unchecked Sendable {
         let proc = HelperProcess(exe, args)
         proc.workingDirectory = URL(fileURLWithPath: base)
         proc.progress = progress
+        proc.memoryLimit = nil   // creating: memory follows the chosen dictionary size
         proc.onPasswordPrompt = { request.password }
         progress.setPhase("Compressing")
         let r = try proc.run()
