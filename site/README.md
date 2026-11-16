@@ -9,20 +9,17 @@ dependencies.
 | `index.html` | The page |
 | `styles.css` | Design (Light and Dark Mode follow the visitor's Mac) |
 | `main.js` | Download button, screenshot tabs, scaling of the window drawings, scroll reveal |
-| `config.js` | **The only file you normally edit**: releases repository and notarization status |
+| `config.js` | **The only file you normally edit**: the DMG download link, version and size, and notarization status |
 | `assets/` | App icon, favicons, social preview image (`og.jpg`), optional real screenshots |
 
 ## Where things live
 
-This repository is private, so nothing here is visible to visitors. Two public repositories hold
-what they see:
-
 | Repository | Purpose |
 |---|---|
+| [`erfanj/Zipper`](https://github.com/erfanj/Zipper) | Source, this `site/` folder (the source of truth for the page) and the DMG [releases](https://github.com/erfanj/Zipper/releases). |
 | [`erfanj/erfanj.github.io`](https://github.com/erfanj/erfanj.github.io) | The published website. This folder is copied to its `zipper/` folder, and GitHub Pages serves it at `https://erfanj.github.io/zipper/`. |
-| [`erfanj/zipper-releases`](https://github.com/erfanj/zipper-releases) | DMG downloads. The download button links to the `.dmg` in its latest release. |
 
-`site/` here is the source of truth. Edit it here, then publish the copy.
+Edit the page here, then publish the copy.
 
 ## Preview locally
 
@@ -44,15 +41,14 @@ GitHub Pages republishes within a minute or two.
 
 ## Publish a new version of Zipper
 
-1. Build the DMG: `Scripts/release.sh` (see `Documentation/Distribution.md`), or download it from
-   the Release workflow's artifacts.
-2. On <https://github.com/erfanj/zipper-releases/releases/new>, create a tag like `v1.0.0`, attach
-   `Zipper-1.0.0.dmg` and `Zipper-1.0.0.dmg.sha256`, and click **Publish release**.
-
-That's all: on load, the page asks GitHub's API for the latest release, links the button to its
-`.dmg`, and shows the version, size and checksum link. The filename must end in `.dmg`, and the
-release must not be marked as a pre-release or draft. If the API can't be reached, the button links
-to the releases page instead.
+1. Build the DMG (`Scripts/release.sh`, see `Documentation/Distribution.md`) and publish it as a
+   release of `erfanj/Zipper`, with `Zipper-<version>.dmg` and `Zipper-<version>.dmg.sha256`
+   attached.
+2. Update `download` in `config.js` (`url`, `checksumUrl`, `version`, `size`). Every download button
+   on the page links straight to `url`.
+3. In `index.html`, replace the old version with the new one (the links, the file name and the
+   "Version · size" lines). They're the fallback for visitors without JavaScript.
+4. Publish the website (above).
 
 ## Use your own domain later
 
